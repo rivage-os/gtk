@@ -23,18 +23,15 @@
 
 G_BEGIN_DECLS
 
-double gtk_adjustment_get_bounded_upper (GtkAdjustment *self);
-
-void gtk_adjustment_enable_animation (GtkAdjustment *adjustment,
-                                      GdkFrameClock *clock,
-                                      guint          duration);
-guint gtk_adjustment_get_animation_duration (GtkAdjustment *adjustment);
-void gtk_adjustment_animate_to_value (GtkAdjustment *adjustment,
-                                      double         value);
-double gtk_adjustment_get_target_value (GtkAdjustment *adjustment);
-
-gboolean gtk_adjustment_is_animating (GtkAdjustment *adjustment);
+guint64  gtk_adjustment_get_change_serial      (GtkAdjustment *adjustment);
+double   gtk_adjustment_get_bounded_upper      (GtkAdjustment *self);
+void     gtk_adjustment_enable_animation       (GtkAdjustment *adjustment,
+                                                GdkFrameClock *clock,
+                                                guint          duration);
+guint    gtk_adjustment_get_animation_duration (GtkAdjustment *adjustment);
+void     gtk_adjustment_animate_to_value       (GtkAdjustment *adjustment,
+                                                double         value);
+double   gtk_adjustment_get_target_value       (GtkAdjustment *adjustment);
+gboolean gtk_adjustment_is_animating           (GtkAdjustment *adjustment);
 
 G_END_DECLS
-
-
