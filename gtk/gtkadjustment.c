@@ -58,6 +58,9 @@ struct _GtkAdjustmentPrivate {
   double source;
   double target;
 
+  /* Counts actual property mutations including while notify is frozen. */
+  guint64 change_serial;
+
   guint duration;
   gulong tick_id;
   gint64 start_time;
@@ -434,6 +437,16 @@ gtk_adjustment_get_target_value (GtkAdjustment *adjustment)
     return priv->value;
 }
 
+guint64
+gtk_adjustment_get_change_serial (GtkAdjustment *adjustment)
+{
+  GtkAdjustmentPrivate *priv = gtk_adjustment_get_instance_private (adjustment);
+
+  g_return_val_if_fail (GTK_IS_ADJUSTMENT (adjustment), 0);
+
+  return priv->change_serial;
+}
+
 static void
 adjustment_set_value (GtkAdjustment *adjustment,
                       double         value)
@@ -445,6 +458,7 @@ adjustment_set_value (GtkAdjustment *adjustment,
   if (priv->value != value)
     {
       priv->value = value;
+      priv->change_serial++;
       emit_value_changed (adjustment);
     }
 }
@@ -631,6 +645,7 @@ gtk_adjustment_set_lower (GtkAdjustment *adjustment,
   if (lower != priv->lower)
     {
       priv->lower = lower;
+      priv->change_serial++;
       g_object_notify_by_pspec (G_OBJECT (adjustment), adjustment_props[PROP_LOWER]);
     }
 }
@@ -679,6 +694,7 @@ gtk_adjustment_set_upper (GtkAdjustment *adjustment,
   if (upper != priv->upper)
     {
       priv->upper = upper;
+      priv->change_serial++;
       g_object_notify_by_pspec (G_OBJECT (adjustment), adjustment_props[PROP_UPPER]);
     }
 }
@@ -724,6 +740,7 @@ gtk_adjustment_set_step_increment (GtkAdjustment *adjustment,
   if (step_increment != priv->step_increment)
     {
       priv->step_increment = step_increment;
+      priv->change_serial++;
       g_object_notify_by_pspec (G_OBJECT (adjustment), adjustment_props[PROP_STEP_INCREMENT]);
     }
 }
@@ -769,6 +786,7 @@ gtk_adjustment_set_page_increment (GtkAdjustment *adjustment,
   if (page_increment != priv->page_increment)
     {
       priv->page_increment = page_increment;
+      priv->change_serial++;
       g_object_notify_by_pspec (G_OBJECT (adjustment), adjustment_props[PROP_PAGE_INCREMENT]);
     }
 }
@@ -814,6 +832,7 @@ gtk_adjustment_set_page_size (GtkAdjustment *adjustment,
   if (page_size != priv->page_size)
     {
       priv->page_size = page_size;
+      priv->change_serial++;
       g_object_notify_by_pspec (G_OBJECT (adjustment), adjustment_props[PROP_PAGE_SIZE]);
     }
 }
@@ -867,6 +886,7 @@ gtk_adjustment_configure (GtkAdjustment *adjustment,
        * new value in place and is emitted before "value-changed"
        */
       priv->value = value;
+      priv->change_serial++;
       value_changed = TRUE;
     }
 
@@ -912,11 +932,13 @@ gtk_adjustment_clamp_page (GtkAdjustment *adjustment,
   if (priv->value + priv->page_size < upper)
     {
       priv->value = upper - priv->page_size;
+      priv->change_serial++;
       need_emission = TRUE;
     }
   if (priv->value > lower)
     {
       priv->value = lower;
+      priv->change_serial++;
       need_emission = TRUE;
     }
 
