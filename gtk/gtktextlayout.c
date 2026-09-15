@@ -522,6 +522,9 @@ gtk_text_layout_set_cursor_visible (GtkTextLayout *layout,
 
       layout->cursor_visible = cursor_visible;
 
+      if (layout->buffer == NULL)
+        return;
+
       /* Now queue a redraw on the paragraph containing the cursor
        */
       gtk_text_buffer_get_iter_at_mark (layout->buffer, &iter,
@@ -4138,7 +4141,9 @@ gtk_text_layout_snapshot (GtkTextLayout         *layout,
 
           if (line_display->node != NULL)
             {
-              if (line_display->has_block_cursor && gtk_widget_has_focus (widget))
+              if (line_display->has_block_cursor &&
+                  (line_display->node_cursor_alpha != cursor_alpha ||
+                   line_display->node_has_focus != gtk_widget_has_focus (widget)))
                 g_clear_pointer (&line_display->node, gsk_render_node_unref);
 
               if (selection_style_changed &&
@@ -4160,6 +4165,8 @@ gtk_text_layout_snapshot (GtkTextLayout         *layout,
                            draw_selection_text,
                            cursor_alpha);
               line_display->node = gtk_snapshot_pop_collect (snapshot);
+              line_display->node_cursor_alpha = cursor_alpha;
+              line_display->node_has_focus = gtk_widget_has_focus (widget);
             }
 
           if (line_display->node != NULL)

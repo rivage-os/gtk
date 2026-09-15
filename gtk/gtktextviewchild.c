@@ -40,6 +40,8 @@ struct _GtkTextViewChild
   GQueue             overlays;
   int                xoffset;
   int                yoffset;
+  double             presentation_x;
+  double             presentation_y;
   GtkWidget         *child;
 };
 
@@ -212,12 +214,10 @@ gtk_text_view_child_size_allocate (GtkWidget *widget,
 
   if (self->child != NULL)
     {
-      rect.x = 0;
-      rect.y = 0;
-      rect.width = width;
-      rect.height = height;
-
-      gtk_widget_size_allocate (self->child, &rect, baseline);
+      gtk_widget_allocate (self->child, width, height, baseline,
+                           gsk_transform_translate (NULL,
+                                                    &GRAPHENE_POINT_INIT (self->presentation_x,
+                                                                          self->presentation_y)));
     }
 
   for (iter = self->overlays.head; iter; iter = iter->next)
@@ -243,7 +243,10 @@ gtk_text_view_child_size_allocate (GtkWidget *widget,
       else
         rect.y = overlay->y;
 
-      gtk_widget_size_allocate (overlay->widget, &rect, -1);
+      gtk_widget_allocate (overlay->widget, rect.width, rect.height, -1,
+                           gsk_transform_translate (NULL,
+                                                    &GRAPHENE_POINT_INIT (rect.x + self->presentation_x,
+                                                                          rect.y + self->presentation_y)));
     }
 }
 
@@ -371,6 +374,7 @@ gtk_text_view_child_class_init (GtkTextViewChildClass *klass)
   widget_class->measure = gtk_text_view_child_measure;
   widget_class->size_allocate = gtk_text_view_child_size_allocate;
   widget_class->snapshot = gtk_text_view_child_snapshot;
+  gtk_widget_class_set_accessible_role (widget_class, GTK_ACCESSIBLE_ROLE_PRESENTATION);
 
   /**
    * GtkTextViewChild:window-type:
@@ -491,4 +495,20 @@ gtk_text_view_child_set_offset (GtkTextViewChild *self,
 
   if (changed)
     gtk_widget_queue_allocate (GTK_WIDGET (self));
+}
+
+void
+gtk_text_view_child_set_presentation (GtkTextViewChild *self,
+                                      double            x,
+                                      double            y)
+{
+  g_return_if_fail (GTK_IS_TEXT_VIEW_CHILD (self));
+
+  if (self->presentation_x == x && self->presentation_y == y)
+    return;
+
+  self->presentation_x = x;
+  self->presentation_y = y;
+
+  gtk_widget_queue_allocate (GTK_WIDGET (self));
 }
