@@ -833,6 +833,24 @@ typedef enum
 } GtkScrollablePolicy;
 
 /**
+ * GtkOverscrollBehavior:
+ * @GTK_OVERSCROLL_BEHAVIOR_AUTO: Chain residual movement and present it at the
+ *   terminal receiver
+ * @GTK_OVERSCROLL_BEHAVIOR_CONTAIN: Stop chaining and permit local presentation
+ * @GTK_OVERSCROLL_BEHAVIOR_NONE: Stop chaining and suppress local presentation
+ *
+ * Controls what happens when scrolling reaches the end of an adjustment.
+ *
+ * Since: 4.24
+ */
+typedef enum
+{
+  GTK_OVERSCROLL_BEHAVIOR_AUTO,
+  GTK_OVERSCROLL_BEHAVIOR_CONTAIN,
+  GTK_OVERSCROLL_BEHAVIOR_NONE
+} GtkOverscrollBehavior;
+
+/**
  * GtkStateFlags:
  * @GTK_STATE_FLAG_NORMAL: State during normal operation
  * @GTK_STATE_FLAG_ACTIVE: Widget is active

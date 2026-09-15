@@ -40,39 +40,52 @@ struct _GtkScrollableInterface
 {
   GTypeInterface base_iface;
 
-  gboolean (* get_border) (GtkScrollable *scrollable,
-                           GtkBorder     *border);
+  gboolean              (*get_border)              (GtkScrollable  *scrollable,
+                                                    GtkBorder      *border);
+  double                (*get_scroll_factor)       (GtkScrollable  *scrollable,
+                                                    GtkOrientation  orientation);
+  GtkOverscrollBehavior (*get_overscroll_behavior) (GtkScrollable  *scrollable,
+                                                    GtkOrientation  orientation);
+  void                  (*overscroll_changed)      (GtkScrollable  *scrollable);
 };
 
 /* Public API */
 GDK_AVAILABLE_IN_ALL
-GType                gtk_scrollable_get_type               (void);
+GType                  gtk_scrollable_get_type                (void);
 GDK_AVAILABLE_IN_ALL
-GtkAdjustment       *gtk_scrollable_get_hadjustment        (GtkScrollable       *scrollable);
+GtkAdjustment         *gtk_scrollable_get_hadjustment         (GtkScrollable       *scrollable);
 GDK_AVAILABLE_IN_ALL
-void                 gtk_scrollable_set_hadjustment        (GtkScrollable       *scrollable,
-							    GtkAdjustment       *hadjustment);
+void                   gtk_scrollable_set_hadjustment         (GtkScrollable       *scrollable,
+                                                               GtkAdjustment       *hadjustment);
 GDK_AVAILABLE_IN_ALL
-GtkAdjustment       *gtk_scrollable_get_vadjustment        (GtkScrollable       *scrollable);
+GtkAdjustment         *gtk_scrollable_get_vadjustment         (GtkScrollable       *scrollable);
 GDK_AVAILABLE_IN_ALL
-void                 gtk_scrollable_set_vadjustment        (GtkScrollable       *scrollable,
-							    GtkAdjustment       *vadjustment);
+void                   gtk_scrollable_set_vadjustment         (GtkScrollable       *scrollable,
+                                                               GtkAdjustment       *vadjustment);
 GDK_AVAILABLE_IN_ALL
-GtkScrollablePolicy  gtk_scrollable_get_hscroll_policy     (GtkScrollable       *scrollable);
+GtkScrollablePolicy    gtk_scrollable_get_hscroll_policy      (GtkScrollable       *scrollable);
 GDK_AVAILABLE_IN_ALL
-void                 gtk_scrollable_set_hscroll_policy     (GtkScrollable       *scrollable,
-							    GtkScrollablePolicy  policy);
+void                   gtk_scrollable_set_hscroll_policy      (GtkScrollable       *scrollable,
+                                                               GtkScrollablePolicy  policy);
 GDK_AVAILABLE_IN_ALL
-GtkScrollablePolicy  gtk_scrollable_get_vscroll_policy     (GtkScrollable       *scrollable);
+GtkScrollablePolicy    gtk_scrollable_get_vscroll_policy      (GtkScrollable       *scrollable);
 GDK_AVAILABLE_IN_ALL
-void                 gtk_scrollable_set_vscroll_policy     (GtkScrollable       *scrollable,
-							    GtkScrollablePolicy  policy);
-
+void                   gtk_scrollable_set_vscroll_policy      (GtkScrollable       *scrollable,
+                                                               GtkScrollablePolicy  policy);
 GDK_AVAILABLE_IN_ALL
-gboolean             gtk_scrollable_get_border             (GtkScrollable       *scrollable,
-                                                            GtkBorder           *border);
+gboolean               gtk_scrollable_get_border              (GtkScrollable       *scrollable,
+                                                               GtkBorder           *border);
+GDK_AVAILABLE_IN_4_24
+double                 gtk_scrollable_get_scroll_factor       (GtkScrollable       *scrollable,
+                                                               GtkOrientation       orientation);
+GDK_AVAILABLE_IN_4_24
+GtkOverscrollBehavior  gtk_scrollable_get_overscroll_behavior (GtkScrollable       *scrollable,
+                                                               GtkOrientation       orientation);
+GDK_AVAILABLE_IN_4_24
+gboolean               gtk_scrollable_get_overscroll          (GtkScrollable       *scrollable,
+                                                               double              *offset_x,
+                                                               double              *offset_y);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkScrollable, g_object_unref)
 
 G_END_DECLS
-
