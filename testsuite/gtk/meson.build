@@ -115,6 +115,8 @@ endif
 
 # Tests that test private apis and therefore are linked against libgtk-4.a
 internal_tests = [
+  { 'name': 'scrollroute' },
+  { 'name': 'scrolledwindow-input' },
   {
     'name': 'composetable',
     'libs': [
