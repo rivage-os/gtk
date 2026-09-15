@@ -265,6 +265,29 @@ nonoverlay_always_height_min_max (void)
   test_size (FALSE, GTK_POLICY_ALWAYS, GTK_ORIENTATION_VERTICAL, MINIMUM_CONTENT | MAXIMUM_CONTENT);
 }
 
+static void
+test_overlay_child_order (void)
+{
+  GtkWidget *scrolledwindow;
+  GtkWidget *child;
+
+  scrolledwindow = gtk_scrolled_window_new ();
+  g_object_ref_sink (scrolledwindow);
+
+  child = gtk_text_view_new ();
+  gtk_scrolled_window_set_overlay_scrolling (GTK_SCROLLED_WINDOW (scrolledwindow), TRUE);
+  gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scrolledwindow), child);
+
+  g_assert_true (gtk_widget_get_first_child (scrolledwindow) == child);
+  g_assert_true (gtk_widget_get_next_sibling (child) ==
+                 gtk_scrolled_window_get_hscrollbar (GTK_SCROLLED_WINDOW (scrolledwindow)));
+  g_assert_true (gtk_widget_get_next_sibling (gtk_widget_get_next_sibling (child)) ==
+                 gtk_scrolled_window_get_vscrollbar (GTK_SCROLLED_WINDOW (scrolledwindow)));
+
+  gtk_scrolled_window_set_child (GTK_SCROLLED_WINDOW (scrolledwindow), NULL);
+  g_object_unref (scrolledwindow);
+}
+
 
 int
 main (int argc, char **argv)
@@ -299,6 +322,8 @@ main (int argc, char **argv)
   g_test_add_func ("/sizing/scrolledwindow/nonoverlay_always_height_max", nonoverlay_always_height_max);
   g_test_add_func ("/sizing/scrolledwindow/nonoverlay_always_width_min_max", nonoverlay_always_width_min_max);
   g_test_add_func ("/sizing/scrolledwindow/nonoverlay_always_height_min_max", nonoverlay_always_height_min_max);
+
+  g_test_add_func ("/sizing/scrolledwindow/overlay_child_order", test_overlay_child_order);
 
   return g_test_run ();
 }
