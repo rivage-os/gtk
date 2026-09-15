@@ -26,6 +26,7 @@
 #include "gtkbuildable.h"
 #include "gtkcolumnviewcolumnprivate.h"
 #include "gtkcolumnviewsorterprivate.h"
+#include "gtkcssboxesprivate.h"
 #include "gtkcssnodeprivate.h"
 #include "gtkdragsourceprivate.h"
 #include "gtkdropcontrollermotion.h"
@@ -34,9 +35,11 @@
 #include "gtkgestureclick.h"
 #include "gtkgesturedrag.h"
 #include "gtklistviewprivate.h"
+#include "gtkrenderbackgroundprivate.h"
 #include "gtkscrollable.h"
 #include "gtkscrollinfoprivate.h"
 #include "gtksizerequest.h"
+#include "gtksnapshot.h"
 #include "gtktypebuiltins.h"
 #include "gtkwidgetprivate.h"
 
@@ -133,17 +136,27 @@ struct _GtkColumnView
   guint show_column_separators : 1;
   guint in_column_resize : 1;
   guint in_column_reorder : 1;
+  guint children_allocated : 1;
 
   int drag_pos;
   int drag_x;
   int drag_offset;
   int drag_column_x;
+  double drag_start_x;
 
   guint autoscroll_id;
   double autoscroll_x;
   double autoscroll_delta;
 
   GtkGesture *drag_gesture;
+
+  double overscroll_x;
+  double overscroll_y;
+
+  int content_x;
+  int content_width;
+  int header_height;
+  int body_height;
 };
 
 struct _GtkColumnViewClass
@@ -291,10 +304,66 @@ gtk_column_view_scrollable_get_border (GtkScrollable *scrollable,
   return TRUE;
 }
 
+static void gtk_column_view_present (GtkColumnView *self);
+
+static double
+gtk_column_view_scrollable_get_scroll_factor (GtkScrollable  *scrollable,
+                                              GtkOrientation  orientation)
+{
+  GtkColumnView *self = GTK_COLUMN_VIEW (scrollable);
+  GtkAdjustment *adjustment;
+  GtkBorder border = { 0 };
+  double extent;
+  double factor;
+
+  adjustment = orientation == GTK_ORIENTATION_HORIZONTAL
+             ? self->hadjustment
+             : gtk_scrollable_get_vadjustment (GTK_SCROLLABLE (self->listview));
+
+  gtk_column_view_scrollable_get_border (scrollable, &border);
+
+  extent = orientation == GTK_ORIENTATION_HORIZONTAL
+         ? gtk_widget_get_width (GTK_WIDGET (self)) - border.left - border.right
+         : gtk_widget_get_height (GTK_WIDGET (self)) - border.top - border.bottom;
+
+  factor = adjustment != NULL && extent > 0
+         ? gtk_adjustment_get_page_size (adjustment) / extent
+         : 0;
+
+  if (orientation == GTK_ORIENTATION_HORIZONTAL &&
+      gtk_widget_get_direction (GTK_WIDGET (self)) == GTK_TEXT_DIR_RTL)
+    factor = -factor;
+
+  return factor;
+}
+
+static void
+gtk_column_view_scrollable_overscroll_changed (GtkScrollable *scrollable)
+{
+  GtkColumnView *self = GTK_COLUMN_VIEW (scrollable);
+  double old_x = self->overscroll_x;
+  double old_y = self->overscroll_y;
+
+  gtk_scrollable_get_overscroll (scrollable, &self->overscroll_x, &self->overscroll_y);
+
+  if (old_x != self->overscroll_x || old_y != self->overscroll_y)
+    gtk_widget_queue_allocate (GTK_WIDGET (self));
+}
+
+static GtkOverscrollBehavior
+gtk_column_view_scrollable_get_overscroll_behavior (GtkScrollable  *scrollable,
+                                                    GtkOrientation  orientation)
+{
+  return GTK_OVERSCROLL_BEHAVIOR_AUTO;
+}
+
 static void
 gtk_column_view_scrollable_interface_init (GtkScrollableInterface *iface)
 {
   iface->get_border = gtk_column_view_scrollable_get_border;
+  iface->get_scroll_factor = gtk_column_view_scrollable_get_scroll_factor;
+  iface->get_overscroll_behavior = gtk_column_view_scrollable_get_overscroll_behavior;
+  iface->overscroll_changed = gtk_column_view_scrollable_overscroll_changed;
 }
 
 G_DEFINE_TYPE_WITH_CODE (GtkColumnView, gtk_column_view, GTK_TYPE_WIDGET,
@@ -498,6 +567,60 @@ gtk_column_view_allocate_columns (GtkColumnView *self,
 }
 
 static void
+gtk_column_view_present (GtkColumnView *self)
+{
+  if (!self->children_allocated)
+    return;
+
+  /* Keep the listview background fixed in the body while ListBase moves rows. */
+  gtk_list_base_set_presentation_offset (GTK_LIST_BASE (self->listview),
+                                         self->overscroll_x,
+                                         self->overscroll_y);
+
+  gtk_widget_allocate (self->header,
+                       self->content_width,
+                       self->header_height,
+                       -1,
+                       gsk_transform_translate (NULL,
+                                                &GRAPHENE_POINT_INIT (self->content_x + self->overscroll_x,
+                                                                      0)));
+
+  gtk_widget_allocate (GTK_WIDGET (self->listview),
+                       self->content_width,
+                       self->body_height,
+                       -1,
+                       gsk_transform_translate (NULL,
+                                                &GRAPHENE_POINT_INIT (self->content_x,
+                                                                      self->header_height)));
+}
+
+static void
+gtk_column_view_snapshot (GtkWidget *widget,
+                          GtkSnapshot *snapshot)
+{
+  GtkColumnView *self = GTK_COLUMN_VIEW (widget);
+
+  gtk_snapshot_push_clip (snapshot,
+                          &GRAPHENE_RECT_INIT (0, 0,
+                                               gtk_widget_get_width (widget),
+                                               gtk_widget_get_height (widget)));
+
+  gtk_widget_snapshot_child (widget, GTK_WIDGET (self->listview), snapshot);
+  gtk_widget_snapshot_child (widget, self->header, snapshot);
+
+  gtk_snapshot_pop (snapshot);
+}
+
+static void
+gtk_column_view_direction_changed (GtkWidget *widget,
+                                   GtkTextDirection previous)
+{
+  GTK_WIDGET_CLASS (gtk_column_view_parent_class)->direction_changed (widget, previous);
+
+  gtk_widget_queue_allocate (widget);
+}
+
+static void
 gtk_column_view_allocate (GtkWidget *widget,
                           int        width,
                           int        height,
@@ -517,12 +640,14 @@ gtk_column_view_allocate (GtkWidget *widget,
 
   dx = (_gtk_widget_get_direction (widget) != GTK_TEXT_DIR_RTL) ? -x : width - full_width + x;
 
-  gtk_widget_allocate (self->header, full_width, header_height, -1,
-                       gsk_transform_translate (NULL, &GRAPHENE_POINT_INIT (dx, 0)));
+  self->children_allocated = FALSE;
+  self->content_width = full_width;
+  self->header_height = header_height;
+  self->body_height = MAX (0, height - header_height);
+  self->content_x = dx;
+  self->children_allocated = TRUE;
 
-  gtk_widget_allocate (GTK_WIDGET (self->listview),
-                       full_width, height - header_height, -1,
-                       gsk_transform_translate (NULL, &GRAPHENE_POINT_INIT (dx, header_height)));
+  gtk_column_view_present (self);
 
   gtk_adjustment_configure (self->hadjustment, x, 0, MAX (full_width, width),
                             width * 0.1, width * 0.9, width);
@@ -601,6 +726,8 @@ static void
 gtk_column_view_dispose (GObject *object)
 {
   GtkColumnView *self = GTK_COLUMN_VIEW (object);
+
+  self->children_allocated = FALSE;
 
   gtk_column_view_sorter_clear (GTK_COLUMN_VIEW_SORTER (self->sorter));
 
@@ -816,6 +943,8 @@ gtk_column_view_class_init (GtkColumnViewClass *klass)
   widget_class->get_request_mode = gtk_column_view_get_request_mode;
   widget_class->measure = gtk_column_view_measure;
   widget_class->size_allocate = gtk_column_view_allocate;
+  widget_class->snapshot = gtk_column_view_snapshot;
+  widget_class->direction_changed = gtk_column_view_direction_changed;
   widget_class->root = gtk_column_view_root;
   widget_class->unroot = gtk_column_view_unroot;
   widget_class->show = gtk_column_view_show;
@@ -1004,16 +1133,34 @@ autoscroll_cb (GtkWidget     *widget,
                gpointer       data)
 {
   GtkColumnView *self = data;
+  graphene_point_t point;
+  double logical_x;
 
   gtk_adjustment_set_value (self->hadjustment,
                             gtk_adjustment_get_value (self->hadjustment) + self->autoscroll_delta);
 
-  self->autoscroll_x += self->autoscroll_delta;
+  /* Keep the pointer anchored in the stationary owner. The header may have
+   * moved since the last input event and adjustment allocation is deferred.
+   */
+  if (!gtk_widget_compute_point (GTK_WIDGET (self),
+                                 self->header,
+                                 &GRAPHENE_POINT_INIT (self->autoscroll_x, 0),
+                                 &point))
+    return G_SOURCE_CONTINUE;
+
+  logical_x = gtk_adjustment_get_value (self->hadjustment);
+
+  if (gtk_widget_get_direction (GTK_WIDGET (self)) == GTK_TEXT_DIR_RTL)
+    logical_x += gtk_widget_get_width (GTK_WIDGET (self)) - self->content_width;
+  else
+    logical_x = -logical_x;
+
+  point.x -= logical_x - self->content_x;
 
   if (self->in_column_resize)
-    update_column_resize (self, self->autoscroll_x);
+    update_column_resize (self, point.x);
   else if (self->in_column_reorder)
-    update_column_reorder (self, self->autoscroll_x);
+    update_column_reorder (self, point.x);
 
   return G_SOURCE_CONTINUE;
 }
@@ -1068,7 +1215,7 @@ update_autoscroll (GtkColumnView *self,
     delta = - delta;
 
   if (delta != 0)
-    add_autoscroll (self, x, delta);
+    add_autoscroll (self, v.x, delta);
   else
     remove_autoscroll (self);
 }
@@ -1145,6 +1292,13 @@ header_drag_begin (GtkGestureDrag *gesture,
                    GtkColumnView  *self)
 {
   int i, n;
+  graphene_point_t point;
+
+  if (gtk_widget_compute_point (self->header,
+                                GTK_WIDGET (self),
+                                &GRAPHENE_POINT_INIT (start_x, start_y),
+                                &point))
+    self->drag_start_x = point.x;
 
   self->drag_pos = -1;
 
@@ -1341,7 +1495,18 @@ header_drag_update (GtkGestureDrag *gesture,
 
   if (!self->in_column_resize && !self->in_column_reorder)
     {
-      if (gtk_drag_check_threshold_double (GTK_WIDGET (self), 0, 0, offset_x, 0))
+      graphene_point_t point;
+
+      gtk_gesture_drag_get_start_point (gesture, &start_x, NULL);
+
+      if (!gtk_widget_compute_point (self->header,
+                                     GTK_WIDGET (self),
+                                     &GRAPHENE_POINT_INIT (start_x + offset_x, 0),
+                                     &point))
+        return;
+
+      /* Test physical pointer travel, excluding header animation and scrolling. */
+      if (gtk_drag_check_threshold_double (GTK_WIDGET (self), self->drag_start_x, 0, point.x, 0))
         {
           GtkColumnViewColumn *column;
           GtkWidget *header;

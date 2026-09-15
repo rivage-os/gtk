@@ -91,6 +91,9 @@ struct _GtkListBasePrivate
   guint autoscroll_id;
   double autoscroll_delta_x;
   double autoscroll_delta_y;
+
+  double presentation_x;
+  double presentation_y;
 };
 
 enum
@@ -107,11 +110,12 @@ enum
 
 /* HACK: We want the g_class argument in our instance init func and G_DEFINE_TYPE() won't let us */
 static void gtk_list_base_init_real (GtkListBase *self, GtkListBaseClass *g_class);
+static void gtk_list_base_scrollable_init (GtkScrollableInterface *iface);
 #define g_type_register_static_simple(a,b,c,d,e,evil,f) g_type_register_static_simple(a,b,c,d,e, (GInstanceInitFunc) gtk_list_base_init_real, f);
 G_DEFINE_ABSTRACT_TYPE_WITH_CODE (GtkListBase, gtk_list_base, GTK_TYPE_WIDGET,
                                                               G_ADD_PRIVATE (GtkListBase)
                                                               G_IMPLEMENT_INTERFACE (GTK_TYPE_ORIENTABLE, NULL)
-                                                              G_IMPLEMENT_INTERFACE (GTK_TYPE_SCROLLABLE, NULL))
+                                                              G_IMPLEMENT_INTERFACE (GTK_TYPE_SCROLLABLE, gtk_list_base_scrollable_init))
 #undef g_type_register_static_simple
 G_GNUC_UNUSED static void gtk_list_base_init (GtkListBase *self) { }
 
@@ -1582,7 +1586,9 @@ gtk_list_base_size_allocate_child (GtkListBase *self,
                                    int          width,
                                    int          height)
 {
+  GtkListBasePrivate *priv = gtk_list_base_get_instance_private (self);
   GtkAllocation child_allocation;
+  graphene_rect_t child_rect;
   int self_width;
 
   self_width = gtk_widget_get_width (GTK_WIDGET (self));
@@ -1618,13 +1624,14 @@ gtk_list_base_size_allocate_child (GtkListBase *self,
       child_allocation.height = width;
     }
 
+  graphene_rect_init (&child_rect,
+                      child_allocation.x + priv->presentation_x - GTK_LIST_BASE_CHILD_MAX_OVERDRAW,
+                      child_allocation.y + priv->presentation_y - GTK_LIST_BASE_CHILD_MAX_OVERDRAW,
+                      child_allocation.width + 2 * GTK_LIST_BASE_CHILD_MAX_OVERDRAW,
+                      child_allocation.height + 2 * GTK_LIST_BASE_CHILD_MAX_OVERDRAW);
+
   if (!graphene_rect_intersection (gtk_css_boxes_get_padding_rect (boxes),
-                                   &GRAPHENE_RECT_INIT(
-                                     child_allocation.x - GTK_LIST_BASE_CHILD_MAX_OVERDRAW,
-                                     child_allocation.y - GTK_LIST_BASE_CHILD_MAX_OVERDRAW,
-                                     child_allocation.width + 2 * GTK_LIST_BASE_CHILD_MAX_OVERDRAW,
-                                     child_allocation.height + 2 * GTK_LIST_BASE_CHILD_MAX_OVERDRAW
-                                   ),
+                                   &child_rect,
                                    NULL))
     {
       /* child is fully outside the viewport, hide it and don't allocate it */
@@ -1634,7 +1641,13 @@ gtk_list_base_size_allocate_child (GtkListBase *self,
 
   gtk_widget_set_child_visible (child, TRUE);
 
-  gtk_widget_size_allocate (child, &child_allocation, -1);
+  gtk_widget_allocate (child,
+                       child_allocation.width,
+                       child_allocation.height,
+                       -1,
+                       gsk_transform_translate (NULL,
+                                                &GRAPHENE_POINT_INIT (child_allocation.x + priv->presentation_x,
+                                                                      child_allocation.y + priv->presentation_y)));
 }
 
 static void
@@ -1674,6 +1687,9 @@ gtk_list_base_widget_to_list (GtkListBase *self,
 {
   GtkListBasePrivate *priv = gtk_list_base_get_instance_private (self);
   GtkWidget *widget = GTK_WIDGET (self);
+
+  x_widget -= priv->presentation_x;
+  y_widget -= priv->presentation_y;
 
   if (gtk_widget_get_direction (widget) == GTK_TEXT_DIR_RTL)
     x_widget = gtk_widget_get_width (widget) - x_widget;
@@ -2167,9 +2183,7 @@ gtk_list_base_set_adjustment_values (GtkListBase    *self,
                                      int             page_size)
 {
   GtkListBasePrivate *priv = gtk_list_base_get_instance_private (self);
-  GtkAdjustment *adjustment;
-
-  adjustment = g_object_ref (priv->adjustment[orientation]);
+  GtkAdjustment *adjustment = g_object_ref (priv->adjustment[orientation]);
 
   size = MAX (size, page_size);
   value = MAX (value, 0);
@@ -2261,6 +2275,52 @@ gtk_list_base_allocate (GtkListBase *self)
 
   gtk_list_base_allocate_children (self, &boxes);
   gtk_list_base_allocate_rubberband (self, &boxes);
+}
+
+static double
+gtk_list_base_get_scroll_factor (GtkScrollable  *scrollable,
+                                 GtkOrientation  orientation)
+{
+  GtkListBase *self = GTK_LIST_BASE (scrollable);
+  GtkListBasePrivate *priv = gtk_list_base_get_instance_private (self);
+  double extent;
+  double factor;
+
+  extent = gtk_widget_get_size (GTK_WIDGET (self), orientation);
+  factor = extent > 0
+         ? gtk_adjustment_get_page_size (priv->adjustment[orientation]) / extent
+         : 0;
+
+  if (orientation == GTK_ORIENTATION_HORIZONTAL &&
+      gtk_widget_get_direction (GTK_WIDGET (self)) == GTK_TEXT_DIR_RTL)
+    factor = -factor;
+
+  return factor;
+}
+
+static GtkOverscrollBehavior
+gtk_list_base_get_overscroll_behavior (GtkScrollable  *scrollable,
+                                       GtkOrientation  orientation)
+{
+  return GTK_OVERSCROLL_BEHAVIOR_AUTO;
+}
+
+static void
+gtk_list_base_overscroll_changed (GtkScrollable *scrollable)
+{
+  double x = 0;
+  double y = 0;
+
+  gtk_scrollable_get_overscroll (scrollable, &x, &y);
+  gtk_list_base_set_presentation_offset (GTK_LIST_BASE (scrollable), x, y);
+}
+
+static void
+gtk_list_base_scrollable_init (GtkScrollableInterface *iface)
+{
+  iface->get_scroll_factor = gtk_list_base_get_scroll_factor;
+  iface->get_overscroll_behavior = gtk_list_base_get_overscroll_behavior;
+  iface->overscroll_changed = gtk_list_base_overscroll_changed;
 }
 
 GtkScrollablePolicy
@@ -2467,6 +2527,22 @@ gtk_list_base_get_tab_behavior (GtkListBase *self)
   GtkListBasePrivate *priv = gtk_list_base_get_instance_private (self);
 
   return priv->tab_behavior;
+}
+
+void
+gtk_list_base_set_presentation_offset (GtkListBase *self,
+                                       double       x,
+                                       double       y)
+{
+  GtkListBasePrivate *priv = gtk_list_base_get_instance_private (self);
+
+  if (priv->presentation_x == x && priv->presentation_y == y)
+    return;
+
+  priv->presentation_x = x;
+  priv->presentation_y = y;
+
+  gtk_widget_queue_allocate (GTK_WIDGET (self));
 }
 
 void

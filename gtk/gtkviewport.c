@@ -73,6 +73,7 @@ struct _GtkViewport
 
   GtkAdjustment *adjustment[2];
   GtkScrollablePolicy scroll_policy[2];
+  int child_size[2];
   guint scroll_to_focus : 1;
 
   gulong focus_handler;
@@ -121,13 +122,14 @@ static void viewport_set_adjustment               (GtkViewport      *viewport,
 static void setup_focus_change_handler (GtkViewport *viewport);
 static void clear_focus_change_handler (GtkViewport *viewport);
 
-static void gtk_viewport_buildable_init (GtkBuildableIface *iface);
-
+static void gtk_viewport_buildable_init  (GtkBuildableIface      *iface);
+static void gtk_viewport_scrollable_init (GtkScrollableInterface *iface);
 
 G_DEFINE_TYPE_WITH_CODE (GtkViewport, gtk_viewport, GTK_TYPE_WIDGET,
                          G_IMPLEMENT_INTERFACE (GTK_TYPE_BUILDABLE,
                                                 gtk_viewport_buildable_init)
-                         G_IMPLEMENT_INTERFACE (GTK_TYPE_SCROLLABLE, NULL))
+                         G_IMPLEMENT_INTERFACE (GTK_TYPE_SCROLLABLE,
+                                                gtk_viewport_scrollable_init))
 
 static GtkBuildableIface *parent_buildable_iface;
 
@@ -500,6 +502,34 @@ viewport_set_adjustment (GtkViewport    *viewport,
 }
 
 static void
+gtk_viewport_allocate_child (GtkViewport *viewport)
+{
+  double child_x;
+  double child_y;
+  double overscroll_x = 0;
+  double overscroll_y = 0;
+
+  if (viewport->child == NULL ||
+      !gtk_widget_get_visible (viewport->child))
+    return;
+
+  gtk_scrollable_get_overscroll (GTK_SCROLLABLE (viewport),
+                                 &overscroll_x,
+                                 &overscroll_y);
+
+  child_x = -gtk_adjustment_get_value (viewport->adjustment[GTK_ORIENTATION_HORIZONTAL]);
+  child_y = -gtk_adjustment_get_value (viewport->adjustment[GTK_ORIENTATION_VERTICAL]);
+
+  gtk_widget_allocate (viewport->child,
+                       viewport->child_size[GTK_ORIENTATION_HORIZONTAL],
+                       viewport->child_size[GTK_ORIENTATION_VERTICAL],
+                       -1,
+                       gsk_transform_translate (NULL,
+                                                &GRAPHENE_POINT_INIT (child_x + overscroll_x,
+                                                                      child_y + overscroll_y)));
+}
+
+static void
 gtk_viewport_size_allocate (GtkWidget *widget,
                             int        width,
                             int        height,
@@ -547,20 +577,50 @@ gtk_viewport_size_allocate (GtkWidget *widget,
   viewport_set_adjustment_values (viewport, GTK_ORIENTATION_HORIZONTAL, width, child_size[GTK_ORIENTATION_HORIZONTAL]);
   viewport_set_adjustment_values (viewport, GTK_ORIENTATION_VERTICAL, height, child_size[GTK_ORIENTATION_VERTICAL]);
 
-  if (viewport->child && gtk_widget_get_visible (viewport->child))
-    {
-      GtkAllocation child_allocation;
+  viewport->child_size[GTK_ORIENTATION_HORIZONTAL] = child_size[GTK_ORIENTATION_HORIZONTAL];
+  viewport->child_size[GTK_ORIENTATION_VERTICAL] = child_size[GTK_ORIENTATION_VERTICAL];
 
-      child_allocation.width = child_size[GTK_ORIENTATION_HORIZONTAL];
-      child_allocation.height = child_size[GTK_ORIENTATION_VERTICAL];
-      child_allocation.x = - gtk_adjustment_get_value (viewport->adjustment[GTK_ORIENTATION_HORIZONTAL]);
-      child_allocation.y = - gtk_adjustment_get_value (viewport->adjustment[GTK_ORIENTATION_VERTICAL]);
-
-      gtk_widget_size_allocate (viewport->child, &child_allocation, -1);
-    }
+  gtk_viewport_allocate_child (viewport);
 
   g_object_thaw_notify (G_OBJECT (viewport->adjustment[GTK_ORIENTATION_HORIZONTAL]));
   g_object_thaw_notify (G_OBJECT (viewport->adjustment[GTK_ORIENTATION_VERTICAL]));
+}
+
+static double
+gtk_viewport_get_scroll_factor (GtkScrollable  *scrollable,
+                                GtkOrientation  orientation)
+{
+  GtkViewport *viewport = GTK_VIEWPORT (scrollable);
+  double extent;
+  double factor;
+
+  extent = gtk_widget_get_size (GTK_WIDGET (viewport), orientation);
+  factor = extent > 0
+         ? gtk_adjustment_get_page_size (viewport->adjustment[orientation]) / extent
+         : 0;
+
+  return factor;
+}
+
+static GtkOverscrollBehavior
+gtk_viewport_get_overscroll_behavior (GtkScrollable  *scrollable,
+                                      GtkOrientation  orientation)
+{
+  return GTK_OVERSCROLL_BEHAVIOR_AUTO;
+}
+
+static void
+gtk_viewport_overscroll_changed (GtkScrollable *scrollable)
+{
+  gtk_widget_queue_allocate (GTK_WIDGET (scrollable));
+}
+
+static void
+gtk_viewport_scrollable_init (GtkScrollableInterface *iface)
+{
+  iface->get_scroll_factor = gtk_viewport_get_scroll_factor;
+  iface->get_overscroll_behavior = gtk_viewport_get_overscroll_behavior;
+  iface->overscroll_changed = gtk_viewport_overscroll_changed;
 }
 
 static void
@@ -759,4 +819,3 @@ gtk_viewport_scroll_to (GtkViewport   *viewport,
 
   g_clear_pointer (&scroll, gtk_scroll_info_unref);
 }
-
