@@ -90,6 +90,9 @@ gboolean               gtk_list_base_get_enable_rubberband      (GtkListBase    
 void                   gtk_list_base_set_tab_behavior           (GtkListBase            *self,
                                                                  GtkListTabBehavior      behavior);
 GtkListTabBehavior     gtk_list_base_get_tab_behavior           (GtkListBase            *self);
+void                   gtk_list_base_set_presentation_offset    (GtkListBase            *self,
+                                                                 double                  x,
+                                                                 double                  y);
 
 
 void                   gtk_list_base_allocate                   (GtkListBase            *self);
