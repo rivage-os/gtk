@@ -50,4 +50,7 @@ G_GNUC_INTERNAL
 void               gtk_text_view_child_set_offset      (GtkTextViewChild  *child,
                                                         int                xoffset,
                                                         int                yoffset);
-
+G_GNUC_INTERNAL
+void               gtk_text_view_child_set_presentation(GtkTextViewChild  *child,
+                                                        double             x,
+                                                        double             y);
