@@ -54,6 +54,8 @@
 
 #include "gtkadjustment.h"
 #include "gtkprivate.h"
+#include "gtkscrollboundariesprivate.h"
+#include "gtkscrolledwindow.h"
 #include "gtktypebuiltins.h"
 
 G_DEFINE_INTERFACE (GtkScrollable, gtk_scrollable, G_TYPE_OBJECT)
@@ -302,4 +304,141 @@ gtk_scrollable_get_border (GtkScrollable *scrollable,
     return GTK_SCROLLABLE_GET_IFACE (scrollable)->get_border (scrollable, border);
 
   return FALSE;
+}
+
+/**
+ * gtk_scrollable_get_scroll_factor:
+ * @scrollable: a `GtkScrollable`
+ * @orientation: the axis to query
+ *
+ * Gets the signed number of adjustment units represented by one pixel in the
+ * widget coordinate space of @scrollable.
+ *
+ * The default is the adjustment page size divided by the scrollport extent.
+ * Implementations only need to override this for unusual adjustment coordinate
+ * systems, such as a horizontally reversed one.
+ *
+ * Returns: adjustment units per widget-space pixel
+ *
+ * Since: 4.24
+ */
+double
+gtk_scrollable_get_scroll_factor (GtkScrollable  *scrollable,
+                                  GtkOrientation  orientation)
+{
+  GtkScrollableInterface *iface;
+  GtkAdjustment *adjustment;
+  GtkBorder border = { 0 };
+  double extent;
+
+  g_return_val_if_fail (GTK_IS_SCROLLABLE (scrollable), 0);
+  g_return_val_if_fail (orientation == GTK_ORIENTATION_HORIZONTAL ||
+                        orientation == GTK_ORIENTATION_VERTICAL,
+                        0);
+
+  iface = GTK_SCROLLABLE_GET_IFACE (scrollable);
+  if (iface->get_scroll_factor != NULL)
+    return iface->get_scroll_factor (scrollable, orientation);
+
+  adjustment = orientation == GTK_ORIENTATION_HORIZONTAL
+             ? gtk_scrollable_get_hadjustment (scrollable)
+             : gtk_scrollable_get_vadjustment (scrollable);
+
+  if (adjustment == NULL || !GTK_IS_WIDGET (scrollable))
+    return 0;
+
+  gtk_scrollable_get_border (scrollable, &border);
+  extent = orientation == GTK_ORIENTATION_HORIZONTAL
+         ? gtk_widget_get_width (GTK_WIDGET (scrollable)) - border.left - border.right
+         : gtk_widget_get_height (GTK_WIDGET (scrollable)) - border.top - border.bottom;
+
+  return extent > 0 ? gtk_adjustment_get_page_size (adjustment) / extent : 0;
+}
+
+/**
+ * gtk_scrollable_get_overscroll_behavior:
+ * @scrollable: a `GtkScrollable`
+ * @orientation: the axis to query
+ *
+ * Gets the overscroll presentation and scroll chaining policy preferred by
+ * @scrollable for an axis.
+ *
+ * `GtkScrolledWindow` uses this as the default for its
+ * [property@Gtk.ScrolledWindow:overscroll-behavior-x] and
+ * [property@Gtk.ScrolledWindow:overscroll-behavior-y] properties when a
+ * scrollable child is added, unless the application has already configured the
+ * corresponding property.
+ *
+ * Returns: the preferred overscroll behavior
+ *
+ * Since: 4.24
+ */
+GtkOverscrollBehavior
+gtk_scrollable_get_overscroll_behavior (GtkScrollable  *scrollable,
+                                        GtkOrientation  orientation)
+{
+  GtkScrollableInterface *iface;
+
+  g_return_val_if_fail (GTK_IS_SCROLLABLE (scrollable), GTK_OVERSCROLL_BEHAVIOR_NONE);
+  g_return_val_if_fail (orientation == GTK_ORIENTATION_HORIZONTAL ||
+                        orientation == GTK_ORIENTATION_VERTICAL,
+                        GTK_OVERSCROLL_BEHAVIOR_NONE);
+
+  iface = GTK_SCROLLABLE_GET_IFACE (scrollable);
+
+  if (iface->get_overscroll_behavior)
+    return iface->get_overscroll_behavior (scrollable, orientation);
+
+  return GTK_OVERSCROLL_BEHAVIOR_NONE;
+}
+
+/**
+ * gtk_scrollable_get_overscroll:
+ * @scrollable: a `GtkScrollable`
+ * @offset_x: (out) (optional): return location for the horizontal offset
+ * @offset_y: (out) (optional): return location for the vertical offset
+ *
+ * Gets the presentation offset owned by the `GtkScrolledWindow` hosting
+ * @scrollable. Positive offsets move the presentation right or down.
+ *
+ * `GtkScrolledWindow` stores this offset and notifies the scrollable with
+ * `GtkScrollableInterface.overscroll_changed`. Scrollable implementations that
+ * opt in to overscroll are responsible for applying the offset to their own
+ * presentation.
+ *
+ * This function only observes committed state. It does not notify, allocate,
+ * draw, or advance an animation.
+ *
+ * Returns: %TRUE if either axis has an active presentation offset
+ *
+ * Since: 4.24
+ */
+gboolean
+gtk_scrollable_get_overscroll (GtkScrollable *scrollable,
+                               double        *offset_x,
+                               double        *offset_y)
+{
+  GtkWidget *parent;
+  double x = 0;
+  double y = 0;
+  gboolean active = FALSE;
+
+  g_return_val_if_fail (GTK_IS_SCROLLABLE (scrollable), FALSE);
+
+  if (GTK_IS_WIDGET (scrollable))
+    {
+      parent = gtk_widget_get_parent (GTK_WIDGET (scrollable));
+
+      if (GTK_IS_SCROLLED_WINDOW (parent))
+        active = _gtk_scrolled_window_get_overscroll (GTK_SCROLLED_WINDOW (parent),
+                                                      scrollable, &x, &y);
+    }
+
+  if (offset_x != NULL)
+    *offset_x = x;
+
+  if (offset_y != NULL)
+    *offset_y = y;
+
+  return active;
 }

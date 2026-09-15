@@ -28,6 +28,7 @@
 #error "Only <gtk/gtk.h> can be included directly."
 #endif
 
+#include <gtk/gtkenums.h>
 #include <gtk/gtkwidget.h>
 
 G_BEGIN_DECLS
@@ -90,99 +91,96 @@ typedef enum
 
 
 GDK_AVAILABLE_IN_ALL
-GType          gtk_scrolled_window_get_type          (void);
+GType                  gtk_scrolled_window_get_type                     (void);
 GDK_AVAILABLE_IN_ALL
-GtkWidget*     gtk_scrolled_window_new               (void);
+GtkWidget             *gtk_scrolled_window_new                          (void);
 GDK_AVAILABLE_IN_ALL
-void           gtk_scrolled_window_set_hadjustment   (GtkScrolledWindow *scrolled_window,
-                                                      GtkAdjustment     *hadjustment);
+void                   gtk_scrolled_window_set_hadjustment              (GtkScrolledWindow     *scrolled_window,
+                                                                         GtkAdjustment         *hadjustment);
 GDK_AVAILABLE_IN_ALL
-void           gtk_scrolled_window_set_vadjustment   (GtkScrolledWindow *scrolled_window,
-                                                      GtkAdjustment     *vadjustment);
+void                   gtk_scrolled_window_set_vadjustment              (GtkScrolledWindow     *scrolled_window,
+                                                                         GtkAdjustment         *vadjustment);
 GDK_AVAILABLE_IN_ALL
-GtkAdjustment* gtk_scrolled_window_get_hadjustment   (GtkScrolledWindow *scrolled_window);
+GtkAdjustment         *gtk_scrolled_window_get_hadjustment              (GtkScrolledWindow     *scrolled_window);
 GDK_AVAILABLE_IN_ALL
-GtkAdjustment* gtk_scrolled_window_get_vadjustment   (GtkScrolledWindow *scrolled_window);
+GtkAdjustment         *gtk_scrolled_window_get_vadjustment              (GtkScrolledWindow     *scrolled_window);
 GDK_AVAILABLE_IN_ALL
-GtkWidget*     gtk_scrolled_window_get_hscrollbar    (GtkScrolledWindow *scrolled_window);
+GtkWidget             *gtk_scrolled_window_get_hscrollbar               (GtkScrolledWindow     *scrolled_window);
 GDK_AVAILABLE_IN_ALL
-GtkWidget*     gtk_scrolled_window_get_vscrollbar    (GtkScrolledWindow *scrolled_window);
+GtkWidget             *gtk_scrolled_window_get_vscrollbar               (GtkScrolledWindow     *scrolled_window);
 GDK_AVAILABLE_IN_ALL
-void           gtk_scrolled_window_set_policy        (GtkScrolledWindow *scrolled_window,
-                                                      GtkPolicyType      hscrollbar_policy,
-                                                      GtkPolicyType      vscrollbar_policy);
+void                   gtk_scrolled_window_set_policy                   (GtkScrolledWindow     *scrolled_window,
+                                                                         GtkPolicyType          hscrollbar_policy,
+                                                                         GtkPolicyType          vscrollbar_policy);
 GDK_AVAILABLE_IN_ALL
-void           gtk_scrolled_window_get_policy        (GtkScrolledWindow *scrolled_window,
-                                                      GtkPolicyType     *hscrollbar_policy,
-                                                      GtkPolicyType     *vscrollbar_policy);
+void                   gtk_scrolled_window_get_policy                   (GtkScrolledWindow     *scrolled_window,
+                                                                         GtkPolicyType         *hscrollbar_policy,
+                                                                         GtkPolicyType         *vscrollbar_policy);
 GDK_AVAILABLE_IN_ALL
-void           gtk_scrolled_window_set_placement     (GtkScrolledWindow *scrolled_window,
-                                                      GtkCornerType      window_placement);
+void                   gtk_scrolled_window_set_placement                (GtkScrolledWindow     *scrolled_window,
+                                                                         GtkCornerType          window_placement);
 GDK_AVAILABLE_IN_ALL
-void           gtk_scrolled_window_unset_placement   (GtkScrolledWindow *scrolled_window);
-
+void                   gtk_scrolled_window_unset_placement              (GtkScrolledWindow     *scrolled_window);
 GDK_AVAILABLE_IN_ALL
-GtkCornerType  gtk_scrolled_window_get_placement     (GtkScrolledWindow *scrolled_window);
+GtkCornerType          gtk_scrolled_window_get_placement                (GtkScrolledWindow     *scrolled_window);
 GDK_AVAILABLE_IN_ALL
-void           gtk_scrolled_window_set_has_frame     (GtkScrolledWindow *scrolled_window,
-                                                      gboolean           has_frame);
+void                   gtk_scrolled_window_set_has_frame                (GtkScrolledWindow     *scrolled_window,
+                                                                         gboolean               has_frame);
 GDK_AVAILABLE_IN_ALL
-gboolean       gtk_scrolled_window_get_has_frame     (GtkScrolledWindow *scrolled_window);
-
+gboolean               gtk_scrolled_window_get_has_frame                (GtkScrolledWindow     *scrolled_window);
 GDK_AVAILABLE_IN_ALL
-int            gtk_scrolled_window_get_min_content_width  (GtkScrolledWindow *scrolled_window);
+int                    gtk_scrolled_window_get_min_content_width        (GtkScrolledWindow     *scrolled_window);
 GDK_AVAILABLE_IN_ALL
-void           gtk_scrolled_window_set_min_content_width  (GtkScrolledWindow *scrolled_window,
-                                                           int                width);
+void                   gtk_scrolled_window_set_min_content_width        (GtkScrolledWindow     *scrolled_window,
+                                                                         int                    width);
 GDK_AVAILABLE_IN_ALL
-int            gtk_scrolled_window_get_min_content_height (GtkScrolledWindow *scrolled_window);
+int                    gtk_scrolled_window_get_min_content_height       (GtkScrolledWindow     *scrolled_window);
 GDK_AVAILABLE_IN_ALL
-void           gtk_scrolled_window_set_min_content_height (GtkScrolledWindow *scrolled_window,
-                                                           int                height);
+void                   gtk_scrolled_window_set_min_content_height       (GtkScrolledWindow     *scrolled_window,
+                                                                         int                    height);
 GDK_AVAILABLE_IN_ALL
-void           gtk_scrolled_window_set_kinetic_scrolling  (GtkScrolledWindow *scrolled_window,
-                                                           gboolean           kinetic_scrolling);
+void                   gtk_scrolled_window_set_kinetic_scrolling        (GtkScrolledWindow     *scrolled_window,
+                                                                         gboolean               kinetic_scrolling);
 GDK_AVAILABLE_IN_ALL
-gboolean       gtk_scrolled_window_get_kinetic_scrolling  (GtkScrolledWindow *scrolled_window);
-
+gboolean               gtk_scrolled_window_get_kinetic_scrolling        (GtkScrolledWindow     *scrolled_window);
 GDK_AVAILABLE_IN_ALL
-void           gtk_scrolled_window_set_overlay_scrolling  (GtkScrolledWindow *scrolled_window,
-                                                           gboolean           overlay_scrolling);
+void                   gtk_scrolled_window_set_overlay_scrolling        (GtkScrolledWindow     *scrolled_window,
+                                                                         gboolean               overlay_scrolling);
 GDK_AVAILABLE_IN_ALL
-gboolean       gtk_scrolled_window_get_overlay_scrolling (GtkScrolledWindow   *scrolled_window);
-
+gboolean               gtk_scrolled_window_get_overlay_scrolling        (GtkScrolledWindow     *scrolled_window);
 GDK_AVAILABLE_IN_ALL
-void           gtk_scrolled_window_set_max_content_width  (GtkScrolledWindow *scrolled_window,
-                                                           int                width);
+void                   gtk_scrolled_window_set_max_content_width        (GtkScrolledWindow     *scrolled_window,
+                                                                         int                    width);
 GDK_AVAILABLE_IN_ALL
-int            gtk_scrolled_window_get_max_content_width  (GtkScrolledWindow *scrolled_window);
-
+int                    gtk_scrolled_window_get_max_content_width        (GtkScrolledWindow     *scrolled_window);
 GDK_AVAILABLE_IN_ALL
-void           gtk_scrolled_window_set_max_content_height (GtkScrolledWindow *scrolled_window,
-                                                           int                height);
+void                   gtk_scrolled_window_set_max_content_height       (GtkScrolledWindow     *scrolled_window,
+                                                                         int                    height);
 GDK_AVAILABLE_IN_ALL
-int            gtk_scrolled_window_get_max_content_height (GtkScrolledWindow *scrolled_window);
-
+int                    gtk_scrolled_window_get_max_content_height       (GtkScrolledWindow     *scrolled_window);
 GDK_AVAILABLE_IN_ALL
-void           gtk_scrolled_window_set_propagate_natural_width  (GtkScrolledWindow *scrolled_window,
-                                                                 gboolean           propagate);
+void                   gtk_scrolled_window_set_propagate_natural_width  (GtkScrolledWindow     *scrolled_window,
+                                                                         gboolean               propagate);
 GDK_AVAILABLE_IN_ALL
-gboolean       gtk_scrolled_window_get_propagate_natural_width  (GtkScrolledWindow *scrolled_window);
-
+gboolean               gtk_scrolled_window_get_propagate_natural_width  (GtkScrolledWindow     *scrolled_window);
 GDK_AVAILABLE_IN_ALL
-void           gtk_scrolled_window_set_propagate_natural_height (GtkScrolledWindow *scrolled_window,
-                                                                 gboolean           propagate);
+void                   gtk_scrolled_window_set_propagate_natural_height (GtkScrolledWindow     *scrolled_window,
+                                                                         gboolean               propagate);
 GDK_AVAILABLE_IN_ALL
-gboolean       gtk_scrolled_window_get_propagate_natural_height (GtkScrolledWindow *scrolled_window);
-
+gboolean               gtk_scrolled_window_get_propagate_natural_height (GtkScrolledWindow     *scrolled_window);
 GDK_AVAILABLE_IN_ALL
-void           gtk_scrolled_window_set_child        (GtkScrolledWindow *scrolled_window,
-                                                     GtkWidget         *child);
+void                   gtk_scrolled_window_set_child                    (GtkScrolledWindow     *scrolled_window,
+                                                                         GtkWidget             *child);
 GDK_AVAILABLE_IN_ALL
-GtkWidget     *gtk_scrolled_window_get_child        (GtkScrolledWindow *scrolled_window);
+GtkWidget             *gtk_scrolled_window_get_child                    (GtkScrolledWindow     *scrolled_window);
+GDK_AVAILABLE_IN_4_24
+void                   gtk_scrolled_window_set_overscroll_behavior      (GtkScrolledWindow     *self,
+                                                                         GtkOrientation         orientation,
+                                                                         GtkOverscrollBehavior  behavior);
+GDK_AVAILABLE_IN_4_24
+GtkOverscrollBehavior  gtk_scrolled_window_get_overscroll_behavior      (GtkScrolledWindow     *self,
+                                                                         GtkOrientation         orientation);
 
 G_DEFINE_AUTOPTR_CLEANUP_FUNC(GtkScrolledWindow, g_object_unref)
 
 G_END_DECLS
-
-

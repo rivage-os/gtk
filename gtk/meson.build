@@ -142,6 +142,7 @@ gtk_private_sources = files([
   'gtkrbtree.c',
   'gtkquery.c',
   'gtkscaler.c',
+  'gtkscrollboundaries.c',
   'gtksearchengine.c',
   'gtksearchenginemodel.c',
   'gtksecurememory.c',
