@@ -1629,6 +1629,12 @@ scroll_overscroll_tick (GtkWidget     *widget,
   return needs_frame;
 }
 
+static void
+scroll_overscroll_stop_notify (gpointer data)
+{
+  gtk_widget_pop_animation_hint (GTK_WIDGET (data));
+}
+
 void
 _gtk_scrolled_window_boundary_schedule (GtkScrolledWindow *self)
 {
@@ -1639,8 +1645,12 @@ _gtk_scrolled_window_boundary_schedule (GtkScrolledWindow *self)
        priv->overscroll_axis[1].motion.needs_frame ||
        priv->motion_velocity[0] != 0 || priv->motion_velocity[1] != 0 ||
        priv->touch_release_pending))
-    priv->overscroll_tick_id = gtk_widget_add_tick_callback (GTK_WIDGET (self),
-                                                             scroll_overscroll_tick, NULL, NULL);
+    {
+      gtk_widget_push_animation_hint (GTK_WIDGET (self));
+      priv->overscroll_tick_id = gtk_widget_add_tick_callback (GTK_WIDGET (self),
+                                                               scroll_overscroll_tick, self,
+                                                               scroll_overscroll_stop_notify);
+    }
 }
 
 void

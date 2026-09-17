@@ -728,6 +728,11 @@ GDK_AVAILABLE_IN_ALL
 void gtk_widget_remove_tick_callback (GtkWidget       *widget,
                                       guint            id);
 
+_GDK_EXTERN
+void gtk_widget_push_animation_hint (GtkWidget *widget);
+_GDK_EXTERN
+void gtk_widget_pop_animation_hint  (GtkWidget *widget);
+
 /**
  * gtk_widget_class_bind_template_callback:
  * @widget_class: a widget class
