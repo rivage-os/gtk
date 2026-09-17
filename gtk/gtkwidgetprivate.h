@@ -142,6 +142,11 @@ struct _GtkWidgetPrivate
   guint8 n_active;
   GList *tick_callbacks;
 
+  /* Outstanding requests survive unmapping, but only mapped widgets contribute. */
+  guint animation_hint_count;
+  guint animation_hint_active;
+  guint animation_hint_disposed : 1;
+
   void (* resize_func) (GtkWidget *);
   GtkBorder margin;
 

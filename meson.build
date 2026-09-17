@@ -212,6 +212,27 @@ foreach h : check_headers
   endif
 endforeach
 
+# Use the architecture's syscall numbers and the kernel's scheduler ABI.
+if os_linux and cc.compiles('''
+  #define _GNU_SOURCE
+  #include <linux/sched.h>
+  #include <linux/sched/types.h>
+  #include <sys/syscall.h>
+  #include <unistd.h>
+
+  int main (void)
+  {
+    struct sched_attr attr = { 0 };
+    attr.size = sizeof attr;
+    attr.sched_flags = SCHED_FLAG_KEEP_ALL | SCHED_FLAG_UTIL_CLAMP_MIN;
+    attr.sched_util_min = attr.sched_util_max;
+    syscall (SYS_sched_getattr, 0, &attr, sizeof attr, 0);
+    return syscall (SYS_sched_setattr, 0, &attr, 0);
+  }
+''', name: 'scheduler utilization clamping')
+  cdata.set('HAVE_SCHED_UCLAMP', 1)
+endif
+
 # Maths functions might be implemented in libm
 libm = cc.find_library('m', required: false)
 

@@ -26,6 +26,7 @@ gtk_private_sources = files([
   'gtkactionsnapshot.c',
   'gtkactiontree.c',
   'gtkallocatedbitmask.c',
+  'gtkanimationhint.c',
   'gtkapplicationaccels.c',
   'gtkapplicationimpl.c',
   'gtkarraylistmodel.c',

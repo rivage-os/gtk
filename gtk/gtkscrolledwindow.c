@@ -3084,11 +3084,7 @@ gtk_scrolled_window_dispose (GObject *object)
       g_clear_pointer (&priv->vscrollbar, gtk_widget_unparent);
     }
 
-  if (priv->deceleration_id)
-    {
-      gtk_widget_remove_tick_callback (GTK_WIDGET (self), priv->deceleration_id);
-      priv->deceleration_id = 0;
-    }
+  gtk_scrolled_window_cancel_deceleration (self);
 
   g_clear_pointer (&priv->hscrolling, gtk_kinetic_scrolling_free);
   g_clear_pointer (&priv->vscrolling, gtk_kinetic_scrolling_free);
@@ -3818,7 +3814,9 @@ static void
 kinetic_scroll_stop_notify (GtkScrolledWindow *scrolled_window)
 {
   GtkScrolledWindowPrivate *priv = gtk_scrolled_window_get_instance_private (scrolled_window);
+
   priv->deceleration_id = 0;
+  gtk_widget_pop_animation_hint (GTK_WIDGET (scrolled_window));
 }
 
 static void
@@ -3915,6 +3913,7 @@ gtk_scrolled_window_start_deceleration (GtkScrolledWindow *scrolled_window)
   else
     g_clear_pointer (&priv->vscrolling, gtk_kinetic_scrolling_free);
 
+  gtk_widget_push_animation_hint (GTK_WIDGET (scrolled_window));
   priv->deceleration_id = gtk_widget_add_tick_callback (GTK_WIDGET (scrolled_window),
                                                         scrolled_window_deceleration_cb, scrolled_window,
                                                         (GDestroyNotify) kinetic_scroll_stop_notify);
@@ -4177,6 +4176,9 @@ gtk_scrolled_window_unmap (GtkWidget *widget)
 
   _gtk_scrolled_window_boundary_release (scrolled_window, GTK_SCROLL_MOTION_CANCEL);
   _gtk_scrolled_window_boundary_cancel (scrolled_window, GTK_SCROLL_ROUTE_BOTH);
+
+  gtk_scrolled_window_cancel_deceleration (scrolled_window);
+  g_clear_handle_id (&priv->scroll_events_overshoot_id, g_source_remove);
 
   if (priv->boundary.overscroll_tick_id != 0)
     {

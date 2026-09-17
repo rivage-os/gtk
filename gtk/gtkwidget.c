@@ -29,6 +29,7 @@
 #include "gtkaccelgroupprivate.h"
 #include "gtkaccessibleprivate.h"
 #include "gtkactiontreeprivate.h"
+#include "gtkanimationhintprivate.h"
 #include "gtkapplicationprivate.h"
 #include "gtkbuildable.h"
 #include "gtkbuilderprivate.h"
@@ -3041,6 +3042,92 @@ gtk_widget_unmap (GtkWidget *widget)
       gtk_widget_pop_verify_invariants (widget);
       g_object_unref (widget);
     }
+}
+
+static void
+gtk_widget_sync_animation_hint (GtkWidget *widget)
+{
+  GtkWidgetPrivate *priv = gtk_widget_get_instance_private (widget);
+  guint target = 0;
+
+  if (priv->realized && priv->mapped && !priv->animation_hint_disposed)
+    target = priv->animation_hint_count;
+
+  while (priv->animation_hint_active < target)
+    {
+      _gtk_push_animation_hint ();
+      priv->animation_hint_active++;
+    }
+
+  while (priv->animation_hint_active > target)
+    {
+      _gtk_pop_animation_hint ();
+      priv->animation_hint_active--;
+    }
+}
+
+/**
+ * gtk_widget_push_animation_hint: (skip)
+ * @widget: a widget
+ *
+ * Requests a scheduler hint for an animation owned by @widget.
+ *
+ * This OS extension is available only to C callers. Requests may be nested
+ * and must be balanced with gtk_widget_pop_animation_hint() while @widget
+ * remains alive. The hint contributes only while @widget is realized and
+ * mapped. Unmapping preserves outstanding requests, which contribute again
+ * when @widget is mapped. Disposal permanently releases the hint, and
+ * finalization discards any remaining requests.
+ *
+ * This function must be called on GTK's UI thread. It does not take a
+ * reference to @widget. Pushing after disposal or overflowing the request
+ * counter produces a critical diagnostic and leaves the requests unchanged.
+ *
+ * The scheduler hint is optional and may be unsupported or denied by the
+ * operating system. Such failures do not affect request accounting.
+ */
+void
+gtk_widget_push_animation_hint (GtkWidget *widget)
+{
+  GtkWidgetPrivate *priv;
+
+  g_return_if_fail (GTK_IS_WIDGET (widget));
+
+  priv = gtk_widget_get_instance_private (widget);
+  g_return_if_fail (!priv->animation_hint_disposed);
+  g_return_if_fail (priv->animation_hint_count < G_MAXUINT);
+
+  priv->animation_hint_count++;
+  gtk_widget_sync_animation_hint (widget);
+}
+
+/**
+ * gtk_widget_pop_animation_hint: (skip)
+ * @widget: a widget
+ *
+ * Releases a request made with gtk_widget_push_animation_hint().
+ *
+ * This OS extension is available only to C callers. Matching pops are
+ * permitted while @widget is unmapped or during destruction callbacks,
+ * including after disposal, provided the object remains alive. Popping
+ * without an outstanding request produces a critical diagnostic and leaves
+ * the requests unchanged. Finalization discards abandoned requests.
+ *
+ * This function must be called on GTK's UI thread. It does not take a
+ * reference to @widget.
+ */
+void
+gtk_widget_pop_animation_hint (GtkWidget *widget)
+{
+  GtkWidgetPrivate *priv;
+
+  g_return_if_fail (GTK_IS_WIDGET (widget));
+
+  priv = gtk_widget_get_instance_private (widget);
+  g_return_if_fail (priv->animation_hint_count > 0);
+
+  priv->animation_hint_count--;
+  gtk_widget_sync_animation_hint (widget);
 }
 
 typedef struct _GtkTickCallbackInfo GtkTickCallbackInfo;
@@ -7726,6 +7813,9 @@ gtk_widget_dispose (GObject *object)
   GtkWidgetPrivate *priv = gtk_widget_get_instance_private (widget);
   GSList *sizegroups;
 
+  priv->animation_hint_disposed = TRUE;
+  gtk_widget_sync_animation_hint (widget);
+
   _gtk_widget_remove_action_node (widget);
 
   if (priv->children_observer)
@@ -8007,6 +8097,7 @@ gtk_widget_real_map (GtkWidget *widget)
     {
       GtkWidget *p;
       priv->mapped = TRUE;
+      gtk_widget_sync_animation_hint (widget);
 
       for (p = gtk_widget_get_first_child (widget);
            p != NULL;
@@ -8029,6 +8120,7 @@ gtk_widget_real_unmap (GtkWidget *widget)
     {
       GtkWidget *child;
       priv->mapped = FALSE;
+      gtk_widget_sync_animation_hint (widget);
 
       for (child = _gtk_widget_get_first_child (widget);
            child != NULL;
@@ -8073,6 +8165,8 @@ gtk_widget_real_unrealize (GtkWidget *widget)
   GtkWidgetPrivate *priv = gtk_widget_get_instance_private (widget);
 
   g_assert (!priv->mapped);
+
+  gtk_widget_sync_animation_hint (widget);
 
    /* We must do unrealize child widget BEFORE container widget.
     * gdk_surface_destroy() destroys specified xwindow and its sub-xwindows.
