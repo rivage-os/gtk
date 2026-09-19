@@ -237,11 +237,18 @@ action_performance = executable('action-performance',
   dependencies: libgtk_private_dep,
 )
 
+emoji_database = executable('emoji-database',
+  sources: 'emoji-database.c',
+  c_args: test_cargs + ['-DGTK_COMPILATION'],
+  dependencies: libgtk_private_dep,
+)
+
 benchmark('action-performance', action_performance,
   env: test_env,
   suite: ['gtk', 'performance'],
   timeout: 300,
 )
+test('emoji-database', emoji_database, env: test_env, suite: ['gtk'])
 
 # FIXME: if objc autotestkeywords_CPPFLAGS += -DHAVE_OBJC=1 -x objective-c++
 if add_languages('cpp', required: false, native: false)
