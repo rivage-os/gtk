@@ -50,6 +50,7 @@ struct _GdkWaylandSurface
   unsigned int has_pending_subsurface_commits : 1;
   unsigned int mapped : 1;
   unsigned int awaiting_frame_frozen : 1;
+  unsigned int suppress_commit : 1;
 
   int pending_buffer_offset_x;
   int pending_buffer_offset_y;
@@ -110,6 +111,8 @@ void gdk_wayland_surface_update_size       (GdkSurface               *surface,
                                             int32_t                   height,
                                             const GdkFractionalScale *scale);
 void gdk_wayland_surface_create_xdg_surface_resources (GdkSurface *surface);
+void gdk_wayland_surface_handle_configure (GdkWaylandSurface *surface,
+                                           uint32_t           serial);
 
 void gdk_wayland_surface_hide_surface (GdkSurface *surface);
 void gdk_wayland_surface_move_resize (GdkSurface *surface,

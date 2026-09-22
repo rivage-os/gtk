@@ -109,6 +109,8 @@ struct _GdkWaylandDisplay
   struct zwp_linux_dmabuf_v1 *linux_dmabuf;
   DmabufFormatsInfo *dmabuf_formats_info;
   struct xdg_wm_base *xdg_wm_base;
+  struct zwlr_layer_shell_v1 *layer_shell;
+  uint32_t layer_shell_id;
   struct zxdg_shell_v6 *zxdg_shell_v6;
   struct xdg_wm_dialog_v1 *xdg_wm_dialog;
   struct gtk_shell1 *gtk_shell;
@@ -196,4 +198,3 @@ void                    gdk_wayland_display_remove_session_toplevel (GdkDisplay 
                                                                      const char *name);
 
 G_END_DECLS
-

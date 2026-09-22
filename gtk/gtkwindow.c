@@ -5437,7 +5437,10 @@ G_GNUC_END_IGNORE_DEPRECATIONS
       priv->in_present = FALSE;
     }
 
-  gdk_toplevel_focus (GDK_TOPLEVEL (priv->surface), timestamp);
+#ifdef GDK_WINDOWING_WAYLAND
+  if (!gdk_wayland_toplevel_is_layer_shell (GDK_TOPLEVEL (priv->surface)))
+#endif
+    gdk_toplevel_focus (GDK_TOPLEVEL (priv->surface), timestamp);
   gtk_window_notify_startup (window);
 }
 

@@ -1395,6 +1395,44 @@ keyboard_handle_keymap (void               *data,
 }
 
 static void
+update_layer_root_focus (GdkWaylandSeat *seat,
+                         GdkSurface     *surface)
+{
+  GdkSurface *root = surface;
+  GList *seats, *l;
+  gboolean focused = FALSE;
+
+  while (GDK_IS_POPUP (root) && root->parent)
+    root = root->parent;
+
+  if (!GDK_IS_WAYLAND_TOPLEVEL (root) ||
+      !gdk_wayland_toplevel_is_layer_shell (GDK_TOPLEVEL (root)) ||
+      GDK_SURFACE_DESTROYED (root))
+    return;
+
+  seats = gdk_display_list_seats (seat->display);
+  for (l = seats; l; l = l->next)
+    {
+      GdkSurface *keyboard_focus = GDK_WAYLAND_SEAT (l->data)->keyboard_focus;
+
+      while (keyboard_focus && GDK_IS_POPUP (keyboard_focus) && keyboard_focus->parent)
+        keyboard_focus = keyboard_focus->parent;
+
+      if (keyboard_focus == root)
+        {
+          focused = TRUE;
+          break;
+        }
+    }
+  g_list_free (seats);
+
+  if (focused)
+    gdk_surface_queue_state_change (root, 0, GDK_TOPLEVEL_STATE_FOCUSED);
+  else
+    gdk_surface_queue_state_change (root, GDK_TOPLEVEL_STATE_FOCUSED, 0);
+}
+
+static void
 keyboard_handle_enter (void               *data,
                        struct wl_keyboard *keyboard,
                        uint32_t            serial,
@@ -1413,6 +1451,7 @@ keyboard_handle_enter (void               *data,
   seat->keyboard_focus = wl_surface_get_user_data (surface);
   g_object_ref (seat->keyboard_focus);
   seat->repeat_key = 0;
+  update_layer_root_focus (seat, seat->keyboard_focus);
 
   event = gdk_focus_event_new (seat->keyboard_focus,
                                seat->logical_keyboard,
@@ -1433,6 +1472,7 @@ keyboard_handle_leave (void               *data,
 {
   GdkWaylandSeat *seat = data;
   GdkEvent *event;
+  GdkSurface *old_focus;
 
   if (!seat->keyboard_focus)
     return;
@@ -1447,7 +1487,10 @@ keyboard_handle_leave (void               *data,
                                seat->logical_keyboard,
                                FALSE);
 
+  old_focus = g_object_ref (seat->keyboard_focus);
   g_clear_object (&seat->keyboard_focus);
+  update_layer_root_focus (seat, old_focus);
+  g_object_unref (old_focus);
   seat->repeat_key = 0;
   seat->key_modifiers = 0;
 
@@ -2508,6 +2551,13 @@ seat_handle_capabilities (void                    *data,
     }
   else if (!(caps & WL_SEAT_CAPABILITY_KEYBOARD) && seat->wl_keyboard)
     {
+      if (seat->keyboard_focus)
+        {
+          GdkSurface *old_focus = g_steal_pointer (&seat->keyboard_focus);
+
+          update_layer_root_focus (seat, old_focus);
+          g_object_unref (old_focus);
+        }
       g_clear_pointer (&seat->wl_keyboard, wl_keyboard_release);
       gdk_seat_device_removed (GDK_SEAT (seat), seat->keyboard);
       _gdk_device_set_associated_device (seat->keyboard, NULL);
@@ -4067,6 +4117,14 @@ static void
 gdk_wayland_seat_dispose (GObject *object)
 {
   GdkWaylandSeat *seat = GDK_WAYLAND_SEAT (object);
+
+  if (seat->keyboard_focus)
+    {
+      GdkSurface *old_focus = g_steal_pointer (&seat->keyboard_focus);
+
+      update_layer_root_focus (seat, old_focus);
+      g_object_unref (old_focus);
+    }
 
   g_clear_pointer (&seat->wl_seat, wl_seat_destroy);
   g_clear_pointer (&seat->wl_pointer, wl_pointer_destroy);

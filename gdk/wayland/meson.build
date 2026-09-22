@@ -13,6 +13,7 @@ gdk_wayland_sources = files([
   'gdkeventsource.c',
   'gdkglcontext-wayland.c',
   'gdkkeymap-wayland.c',
+  'gdklayersurface-wayland.c',
   'gdkmonitor-wayland.c',
   'gdkprimary-wayland.c',
   'gdkseat-wayland.c',
@@ -30,6 +31,7 @@ gdk_wayland_public_headers = files([
   'gdkwaylanddevice.h',
   'gdkwaylanddisplay.h',
   'gdkwaylandglcontext.h',
+  'gdkwaylandlayer.h',
   'gdkwaylandmonitor.h',
   'gdkwaylandpopup.h',
   'gdkwaylandseat.h',
@@ -53,6 +55,10 @@ gdk_wayland_deps = [
 #  - version: protocol version
 #  - required: wayland_protocols version check
 proto_sources = [
+  {
+    'name': 'wlr-layer-shell-unstable-v1',
+    'stability': 'private',
+  },
   {
     'name': 'gtk-shell',
     'stability': 'private',

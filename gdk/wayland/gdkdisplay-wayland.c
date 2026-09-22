@@ -65,6 +65,7 @@
 #include "color-management-v1-client-protocol.h"
 #include "color-representation-v1-client-protocol.h"
 #include "xdg-session-management-v1-client-protocol.h"
+#include "wlr-layer-shell-unstable-v1-client-protocol.h"
 
 #include "gdk/gdkprivate.h"
 
@@ -554,6 +555,13 @@ gdk_registry_handle_global (void               *data,
       display_wayland->xdg_wm_base_id = id;
       display_wayland->xdg_wm_base_version = version;
     }
+  else if (match_global (display_wayland, interface, version, zwlr_layer_shell_v1_interface.name, 0))
+    {
+      display_wayland->layer_shell_id = id;
+      display_wayland->layer_shell =
+        wl_registry_bind (display_wayland->wl_registry, id,
+                          &zwlr_layer_shell_v1_interface, MIN (version, 4));
+    }
   else if (match_global (display_wayland, interface, version, zxdg_shell_v6_interface.name, 0))
     {
       display_wayland->zxdg_shell_v6_id = id;
@@ -775,6 +783,16 @@ gdk_registry_handle_global_remove (void               *data,
   gdk_wayland_display_remove_seat (display_wayland, id);
   gdk_wayland_display_remove_output (display_wayland, id);
 
+  if (display_wayland->layer_shell_id == id)
+    {
+      if (zwlr_layer_shell_v1_get_version (display_wayland->layer_shell) >= 3)
+        zwlr_layer_shell_v1_destroy (display_wayland->layer_shell);
+      else
+        wl_proxy_destroy ((struct wl_proxy *) display_wayland->layer_shell);
+      display_wayland->layer_shell = NULL;
+      display_wayland->layer_shell_id = 0;
+    }
+
   g_hash_table_remove (display_wayland->known_globals, GUINT_TO_POINTER (id));
 
   /* FIXME: the object needs to be destroyed here, we're leaking */
@@ -933,6 +951,14 @@ gdk_wayland_display_dispose (GObject *object)
 
   g_clear_pointer (&display_wayland->compositor, wl_compositor_destroy);
   g_clear_pointer (&display_wayland->xdg_wm_base, xdg_wm_base_destroy);
+  if (display_wayland->layer_shell)
+    {
+      if (zwlr_layer_shell_v1_get_version (display_wayland->layer_shell) >= 3)
+        zwlr_layer_shell_v1_destroy (display_wayland->layer_shell);
+      else
+        wl_proxy_destroy ((struct wl_proxy *) display_wayland->layer_shell);
+      display_wayland->layer_shell = NULL;
+    }
   g_clear_pointer (&display_wayland->zxdg_shell_v6, zxdg_shell_v6_destroy);
   g_clear_pointer (&display_wayland->gtk_shell, gtk_shell1_destroy);
   g_clear_pointer (&display_wayland->data_device_manager, wl_data_device_manager_destroy);

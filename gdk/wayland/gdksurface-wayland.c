@@ -832,7 +832,8 @@ gdk_wayland_surface_commit (GdkSurface *surface)
 {
   GdkWaylandSurface *impl = GDK_WAYLAND_SURFACE (surface);
 
-  wl_surface_commit (impl->display_server.wl_surface);
+  if (!impl->suppress_commit)
+    wl_surface_commit (impl->display_server.wl_surface);
 }
 
 /**
@@ -1462,7 +1463,7 @@ gdk_wayland_surface_configure (GdkSurface *surface)
   memset (&impl->pending, 0, sizeof (impl->pending));
 }
 
-static void
+void
 gdk_wayland_surface_handle_configure (GdkWaylandSurface *impl,
                                       uint32_t           serial)
 {
@@ -1591,8 +1592,11 @@ gdk_wayland_surface_hide_surface (GdkSurface *surface)
         impl->initial_configure_received = FALSE;
     }
 
-  wl_surface_attach (impl->display_server.wl_surface, NULL, 0, 0);
-  wl_surface_commit (impl->display_server.wl_surface);
+  if (!impl->suppress_commit)
+    {
+      wl_surface_attach (impl->display_server.wl_surface, NULL, 0, 0);
+      wl_surface_commit (impl->display_server.wl_surface);
+    }
 
   impl->has_uncommitted_ack_configure = FALSE;
   impl->has_pending_subsurface_commits = FALSE;

@@ -18,6 +18,10 @@
 #pragma once
 
 #include "gdksurfaceprivate.h"
+#include "gdkwaylandtoplevel.h"
+
+struct zwlr_layer_surface_v1;
+struct zwlr_layer_surface_v1 *_gdk_wayland_toplevel_get_layer_surface (GdkSurface *surface);
 
 void gdk_wayland_toplevel_set_geometry_hints      (GdkWaylandToplevel *toplevel,
                                                    const GdkGeometry  *geometry,

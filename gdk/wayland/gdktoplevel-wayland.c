@@ -18,6 +18,7 @@
 #include "config.h"
 
 #include "gdkwaylandtoplevel.h"
+#include "gdkwaylandlayer.h"
 
 #include "gdkdeviceprivate.h"
 #include "gdkdisplay-wayland.h"
@@ -51,6 +52,7 @@
 #include "gdksurface-wayland-private.h"
 #include "gdktoplevel-wayland-private.h"
 #include "gdksubsurface-wayland-private.h"
+#include "gdklayersurface-wayland-private.h"
 #include "gdkshm-private.h"
 
 #define MAX_WL_BUFFER_SIZE (4083) /* 4096 minus header, string argument length and NUL byte */
@@ -84,6 +86,9 @@ typedef struct {
 struct _GdkWaylandToplevel
 {
   GdkWaylandSurface parent_instance;
+
+  GdkWaylandLayerSurface *layer_surface;
+  gboolean wire_role_assigned;
 
   struct {
     struct gtk_surface1 *gtk_surface;
@@ -259,6 +264,12 @@ static void
 gdk_wayland_toplevel_hide_surface (GdkWaylandSurface *wayland_surface)
 {
   GdkWaylandToplevel *toplevel = GDK_WAYLAND_TOPLEVEL (wayland_surface);
+
+  if (toplevel->layer_surface)
+    {
+      _gdk_wayland_layer_surface_hide (toplevel->layer_surface);
+      return;
+    }
 
   g_clear_pointer (&toplevel->display_server.xdg_toplevel, xdg_toplevel_destroy);
   g_clear_pointer (&toplevel->display_server.zxdg_toplevel_v6, zxdg_toplevel_v6_destroy);
@@ -453,6 +464,12 @@ gdk_wayland_toplevel_compute_size (GdkSurface *surface)
   GdkGeometry geometry;
   GdkSurfaceHints mask;
 
+  if (wayland_toplevel->layer_surface)
+    {
+      _gdk_wayland_layer_surface_compute_size (wayland_toplevel->layer_surface);
+      return FALSE;
+    }
+
   if (!wayland_surface->next_layout.surface_geometry_dirty)
     return FALSE;
 
@@ -613,6 +630,12 @@ gdk_wayland_toplevel_handle_configure (GdkWaylandSurface *wayland_surface)
   gboolean fixed_size;
   gboolean was_fixed_size;
   gboolean saved_size;
+
+  if (wayland_toplevel->layer_surface)
+    {
+      _gdk_wayland_layer_surface_configure (wayland_toplevel->layer_surface);
+      return;
+    }
 
   new_state = wayland_toplevel->pending.state;
   wayland_toplevel->pending.state = 0;
@@ -977,6 +1000,8 @@ gdk_wayland_surface_create_xdg_toplevel (GdkWaylandToplevel *wayland_toplevel)
   GdkSurface *surface = GDK_SURFACE (wayland_toplevel);
   GdkWaylandSurface *wayland_surface = GDK_WAYLAND_SURFACE (wayland_toplevel);
   const char *app_id;
+
+  wayland_toplevel->wire_role_assigned = TRUE;
 
   gdk_surface_freeze_updates (surface);
   gdk_wayland_surface_create_xdg_surface_resources (surface);
@@ -1594,6 +1619,7 @@ gdk_wayland_toplevel_finalize (GObject *object)
   display_wayland->toplevels = g_list_remove (display_wayland->toplevels, self);
 
   unset_transient_for_exported (self);
+  g_clear_pointer (&self->layer_surface, _gdk_wayland_layer_surface_free);
 
   g_free (self->application.application_id);
   g_free (self->application.app_menu_path);
@@ -1676,8 +1702,8 @@ gdk_wayland_toplevel_minimize (GdkToplevel *toplevel)
   GdkWaylandSurface *impl = GDK_WAYLAND_SURFACE (surface);
   GdkWaylandToplevel *wayland_toplevel = GDK_WAYLAND_TOPLEVEL (surface);
 
-  if (GDK_SURFACE_DESTROYED (surface))
-    return TRUE;
+  if (GDK_SURFACE_DESTROYED (surface) || wayland_toplevel->layer_surface)
+    return FALSE;
 
   if (!is_realized_toplevel (impl))
     return TRUE;
@@ -1698,7 +1724,7 @@ gdk_wayland_toplevel_maximize (GdkToplevel *toplevel)
   GdkWaylandSurface *wayland_surface = GDK_WAYLAND_SURFACE (surface);
   GdkWaylandToplevel *wayland_toplevel = GDK_WAYLAND_TOPLEVEL (toplevel);
 
-  if (GDK_SURFACE_DESTROYED (surface))
+  if (GDK_SURFACE_DESTROYED (surface) || wayland_toplevel->layer_surface)
     return;
 
   gdk_wayland_toplevel_save_size (wayland_toplevel);
@@ -1720,7 +1746,7 @@ gdk_wayland_toplevel_unmaximize (GdkToplevel *toplevel)
   GdkWaylandSurface *wayland_surface = GDK_WAYLAND_SURFACE (surface);
   GdkWaylandToplevel *wayland_toplevel = GDK_WAYLAND_TOPLEVEL (toplevel);
 
-  if (GDK_SURFACE_DESTROYED (surface))
+  if (GDK_SURFACE_DESTROYED (surface) || wayland_toplevel->layer_surface)
     return;
 
   if (is_realized_toplevel (wayland_surface))
@@ -1741,7 +1767,7 @@ gdk_wayland_toplevel_fullscreen_on_monitor (GdkWaylandToplevel *wayland_toplevel
   GdkWaylandSurface *wayland_surface = GDK_WAYLAND_SURFACE (surface);
   struct wl_output *output = ((GdkWaylandMonitor *)monitor)->output;
 
-  if (GDK_SURFACE_DESTROYED (surface))
+  if (GDK_SURFACE_DESTROYED (surface) || wayland_toplevel->layer_surface)
     return;
 
   gdk_wayland_toplevel_save_size (wayland_toplevel);
@@ -1763,7 +1789,7 @@ gdk_wayland_toplevel_fullscreen (GdkWaylandToplevel *wayland_toplevel)
   GdkSurface *surface = GDK_SURFACE (wayland_toplevel);
   GdkWaylandSurface *wayland_surface = GDK_WAYLAND_SURFACE (wayland_toplevel);
 
-  if (GDK_SURFACE_DESTROYED (surface))
+  if (GDK_SURFACE_DESTROYED (surface) || wayland_toplevel->layer_surface)
     return;
 
   wayland_toplevel->initial_fullscreen_output = NULL;
@@ -1786,7 +1812,7 @@ gdk_wayland_toplevel_unfullscreen (GdkWaylandToplevel *wayland_toplevel)
   GdkSurface *surface = GDK_SURFACE (wayland_toplevel);
   GdkWaylandSurface *wayland_surface = GDK_WAYLAND_SURFACE (wayland_toplevel);
 
-  if (GDK_SURFACE_DESTROYED (surface))
+  if (GDK_SURFACE_DESTROYED (surface) || wayland_toplevel->layer_surface)
     return;
 
   wayland_toplevel->initial_fullscreen_output = NULL;
@@ -1809,6 +1835,16 @@ gdk_wayland_toplevel_show (GdkWaylandToplevel *toplevel)
   if (impl->mapped)
     return;
 
+  if (toplevel->layer_surface)
+    {
+      if (_gdk_wayland_layer_surface_is_closed (toplevel->layer_surface))
+        return;
+      if (!_gdk_wayland_layer_surface_show (toplevel->layer_surface))
+        return;
+      impl->mapped = TRUE;
+      return;
+    }
+
   gdk_wayland_surface_create_xdg_toplevel (toplevel);
 
   impl->mapped = TRUE;
@@ -1824,6 +1860,16 @@ gdk_wayland_toplevel_present (GdkToplevel       *toplevel,
   gboolean pending_configure = FALSE;
   gboolean maximize;
   gboolean fullscreen;
+
+  if (wayland_toplevel->layer_surface)
+    {
+      gdk_wayland_toplevel_show (wayland_toplevel);
+      if (!wayland_surface->mapped)
+        return;
+      wayland_surface->next_layout.surface_geometry_dirty = TRUE;
+      gdk_surface_request_layout (surface);
+      return;
+    }
 
   if (gdk_toplevel_layout_get_maximized (layout, &maximize))
     {
@@ -2353,6 +2399,9 @@ gdk_wayland_toplevel_focus (GdkToplevel *toplevel,
     GDK_WAYLAND_SEAT (gdk_display_get_default_seat (display));
   gchar *startup_id = NULL;
 
+  if (wayland_toplevel->layer_surface)
+    return;
+
   startup_id = g_steal_pointer (&display_wayland->startup_notification_id);
 
   if (seat && display_wayland->xdg_activation)
@@ -2411,6 +2460,195 @@ gdk_wayland_toplevel_focus (GdkToplevel *toplevel,
     }
 
   g_free (startup_id);
+}
+
+void
+_gdk_wayland_toplevel_layer_closed (GdkToplevel *toplevel)
+{
+  gdk_wayland_surface_handle_close (GDK_SURFACE (toplevel));
+}
+
+struct zwlr_layer_surface_v1 *
+_gdk_wayland_toplevel_get_layer_surface (GdkSurface *surface)
+{
+  GdkWaylandToplevel *toplevel;
+
+  if (!GDK_IS_WAYLAND_TOPLEVEL (surface))
+    return NULL;
+
+  toplevel = GDK_WAYLAND_TOPLEVEL (surface);
+  return toplevel->layer_surface ?
+    _gdk_wayland_layer_surface_get_proxy (toplevel->layer_surface) : NULL;
+}
+
+/**
+ * gdk_wayland_toplevel_is_layer_shell:
+ * @toplevel: a `GdkToplevel`
+ *
+ * Returns: whether this toplevel has selected the layer-shell role
+ *
+ * Since: 4.26
+ */
+gboolean
+gdk_wayland_toplevel_is_layer_shell (GdkToplevel *toplevel)
+{
+  g_return_val_if_fail (GDK_IS_TOPLEVEL (toplevel), FALSE);
+
+  return GDK_IS_WAYLAND_TOPLEVEL (toplevel) &&
+         GDK_WAYLAND_TOPLEVEL (toplevel)->layer_surface != NULL;
+}
+
+/**
+ * gdk_wayland_toplevel_enable_layer_shell:
+ * @toplevel: a role-free Wayland toplevel
+ * @monitor: (nullable): the fixed output, or `NULL` for compositor selection
+ * @namespace_: a descriptive namespace
+ * @layout: the initial layout
+ * @error: return location for an error
+ *
+ * Selects the layer-shell role before first presentation. The layout is copied.
+ *
+ * Returns: whether the role was selected
+ *
+ * Since: 4.26
+ */
+gboolean
+gdk_wayland_toplevel_enable_layer_shell (GdkToplevel                 *toplevel,
+                                         GdkMonitor                  *monitor,
+                                         const char                  *namespace_,
+                                         const GdkWaylandLayerLayout *layout,
+                                         GError                     **error)
+{
+  GdkWaylandToplevel *wayland_toplevel;
+  GdkDisplay *display;
+  unsigned int version;
+
+  g_return_val_if_fail (GDK_IS_TOPLEVEL (toplevel), FALSE);
+  g_return_val_if_fail (layout != NULL, FALSE);
+  g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
+
+  if (!GDK_IS_WAYLAND_TOPLEVEL (toplevel))
+    {
+      g_set_error_literal (error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
+                           "Layer shell requires a Wayland toplevel");
+      return FALSE;
+    }
+
+  wayland_toplevel = GDK_WAYLAND_TOPLEVEL (toplevel);
+  display = gdk_surface_get_display (GDK_SURFACE (toplevel));
+  version = gdk_wayland_display_get_layer_shell_version (display);
+
+  if (version == 0 || GDK_WAYLAND_DISPLAY (display)->shell_variant != GDK_WAYLAND_SHELL_VARIANT_XDG_SHELL)
+    {
+      g_set_error_literal (error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
+                           "Layer shell and stable XDG shell are required");
+      return FALSE;
+    }
+  if (GDK_SURFACE_DESTROYED (toplevel) || wayland_toplevel->wire_role_assigned ||
+      wayland_toplevel->layer_surface || GDK_WAYLAND_SURFACE (toplevel)->mapped)
+    {
+      g_set_error_literal (error, G_IO_ERROR, G_IO_ERROR_FAILED,
+                           "The toplevel already has a wire role");
+      return FALSE;
+    }
+  if (namespace_ == NULL || *namespace_ == '\0' || !g_utf8_validate (namespace_, -1, NULL))
+    {
+      g_set_error_literal (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
+                           "The layer namespace must be nonempty UTF-8");
+      return FALSE;
+    }
+  if (monitor && (!GDK_IS_WAYLAND_MONITOR (monitor) ||
+                  gdk_monitor_get_display (monitor) != display ||
+                  !gdk_monitor_is_valid (monitor)))
+    {
+      g_set_error_literal (error, G_IO_ERROR, G_IO_ERROR_INVALID_ARGUMENT,
+                           "The selected monitor is not valid on this display");
+      return FALSE;
+    }
+  if (!_gdk_wayland_layer_layout_validate (layout, version, error))
+    return FALSE;
+
+  wayland_toplevel->layer_surface =
+    _gdk_wayland_layer_surface_new (toplevel, monitor, namespace_, layout);
+  wayland_toplevel->wire_role_assigned = TRUE;
+  wayland_toplevel->capabilities = 0;
+  g_object_notify (G_OBJECT (toplevel), "capabilities");
+
+  return TRUE;
+}
+
+/**
+ * gdk_wayland_toplevel_set_layer_layout:
+ * @toplevel: a layer toplevel
+ * @layout: the new desired layout
+ * @error: return location for an error
+ *
+ * Replaces the desired layout atomically. The layout is copied.
+ *
+ * Returns: whether the layout was accepted
+ *
+ * Since: 4.26
+ */
+gboolean
+gdk_wayland_toplevel_set_layer_layout (GdkToplevel                 *toplevel,
+                                       const GdkWaylandLayerLayout *layout,
+                                       GError                     **error)
+{
+  GdkWaylandToplevel *wayland_toplevel;
+  unsigned int version;
+
+  g_return_val_if_fail (GDK_IS_TOPLEVEL (toplevel), FALSE);
+  g_return_val_if_fail (layout != NULL, FALSE);
+  g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
+
+  if (!gdk_wayland_toplevel_is_layer_shell (toplevel))
+    {
+      g_set_error_literal (error, G_IO_ERROR, G_IO_ERROR_FAILED,
+                           "The toplevel has no layer-shell role");
+      return FALSE;
+    }
+
+  wayland_toplevel = GDK_WAYLAND_TOPLEVEL (toplevel);
+  if (GDK_SURFACE_DESTROYED (toplevel) ||
+      _gdk_wayland_layer_surface_is_closed (wayland_toplevel->layer_surface))
+    {
+      g_set_error_literal (error, G_IO_ERROR, G_IO_ERROR_CLOSED,
+                           "The layer surface is closed");
+      return FALSE;
+    }
+
+  version = _gdk_wayland_layer_surface_get_version (wayland_toplevel->layer_surface);
+  if (version < 2 && gdk_wayland_layer_layout_get_layer (layout) !=
+                     _gdk_wayland_layer_surface_get_layer (wayland_toplevel->layer_surface))
+    {
+      g_set_error_literal (error, G_IO_ERROR, G_IO_ERROR_NOT_SUPPORTED,
+                           "Changing layers requires layer-shell version 2");
+      return FALSE;
+    }
+  if (!_gdk_wayland_layer_layout_validate (layout, version, error))
+    return FALSE;
+
+  _gdk_wayland_layer_surface_set_layout (wayland_toplevel->layer_surface, layout);
+  return TRUE;
+}
+
+/**
+ * gdk_wayland_toplevel_dup_layer_layout:
+ * @toplevel: a layer toplevel
+ *
+ * Returns: (transfer full) (nullable): a copy of the desired layout
+ *
+ * Since: 4.26
+ */
+GdkWaylandLayerLayout *
+gdk_wayland_toplevel_dup_layer_layout (GdkToplevel *toplevel)
+{
+  g_return_val_if_fail (GDK_IS_TOPLEVEL (toplevel), NULL);
+
+  if (!gdk_wayland_toplevel_is_layer_shell (toplevel))
+    return NULL;
+
+  return _gdk_wayland_layer_surface_dup_layout (GDK_WAYLAND_TOPLEVEL (toplevel)->layer_surface);
 }
 
 static void
@@ -2497,6 +2735,9 @@ void
 gdk_wayland_toplevel_destroy (GdkToplevel *toplevel)
 {
   GdkWaylandToplevel *self = GDK_WAYLAND_TOPLEVEL (toplevel);
+
+  /* The role resource must be released before the wl_surface is destroyed. */
+  g_clear_pointer (&self->layer_surface, _gdk_wayland_layer_surface_free);
 
   while (self->exported)
     {

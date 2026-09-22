@@ -19,6 +19,8 @@
 
 #include "gdkwaylandpopup.h"
 #include "gdksurface-wayland-private.h"
+#include "gdktoplevel-wayland-private.h"
+#include "wlr-layer-shell-unstable-v1-client-protocol.h"
 
 #include "gdkdeviceprivate.h"
 #include "gdkdisplay-wayland.h"
@@ -66,7 +68,8 @@ static gboolean
 is_realized_shell_surface (GdkWaylandSurface *impl)
 {
   return (impl->display_server.xdg_surface ||
-          impl->display_server.zxdg_surface_v6);
+          impl->display_server.zxdg_surface_v6 ||
+          _gdk_wayland_toplevel_get_layer_surface (GDK_SURFACE (impl)));
 }
 
 static enum xdg_positioner_anchor
@@ -836,6 +839,7 @@ create_dynamic_positioner (GdkWaylandPopup *wayland_popup,
           xdg_positioner_set_reactive (positioner);
 
         if (ack_parent_configure &&
+            !_gdk_wayland_toplevel_get_layer_surface (GDK_SURFACE (parent_impl)) &&
             xdg_positioner_get_version (positioner) >=
             XDG_POSITIONER_SET_PARENT_CONFIGURE_SINCE_VERSION)
           {
@@ -917,10 +921,15 @@ xdg_popup_create_resources (gpointer unused,
                             GdkWaylandSurface *parent_impl,
                             gpointer positioner)
 {
+  struct zwlr_layer_surface_v1 *layer_surface =
+    _gdk_wayland_toplevel_get_layer_surface (GDK_SURFACE (parent_impl));
+
   wayland_popup->display_server.xdg_popup =
     xdg_surface_get_popup (GDK_WAYLAND_SURFACE (wayland_popup)->display_server.xdg_surface,
-                           parent_impl->display_server.xdg_surface,
+                           layer_surface ? NULL : parent_impl->display_server.xdg_surface,
                            positioner);
+  if (layer_surface)
+    zwlr_layer_surface_v1_get_popup (layer_surface, wayland_popup->display_server.xdg_popup);
   xdg_popup_add_listener (wayland_popup->display_server.xdg_popup,
                           &xdg_popup_listener,
                           wayland_popup);
