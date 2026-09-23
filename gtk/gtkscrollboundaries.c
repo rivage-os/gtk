@@ -24,6 +24,7 @@
 #include "gtkscrollboundariesprivate.h"
 
 #include "gtkadjustmentprivate.h"
+#include "gtknative.h"
 #include "gtksettingsprivate.h"
 #include "gtkwidgetprivate.h"
 
@@ -88,6 +89,17 @@ static gboolean scroll_overscroll_adopt_adjustment_change (GtkScrolledWindow *se
                                                            GtkAdjustment     *adjustment);
 
 static guint64 overscroll_sequence;
+
+static GtkWidget *
+scroll_route_get_parent (GtkWidget *widget)
+{
+  g_assert (GTK_IS_WIDGET (widget));
+
+  if (GTK_IS_NATIVE (widget))
+    return NULL;
+
+  return gtk_widget_get_parent (widget);
+}
 
 /* No adjustment writes, including on invalid input. The subtraction-based
  * residual stays in input space, not adjustment or presentation space.
@@ -805,13 +817,14 @@ _gtk_scroll_motion_axis_handle (GtkScrollMotionAxis        *motion,
   return old_offset != motion->offset;
 }
 
-/* Enhanced routing is selected for the complete ancestor chain. This also
- * enforces an outer containment barrier when the original child is legacy.
+/* Enhanced routing is selected for the ancestor chain within this native.
+ * This also enforces an outer containment barrier when the original child is
+ * legacy.
  */
 gboolean
 _gtk_scrolled_window_boundary_chain_uses_routing (GtkWidget *widget)
 {
-  for (; widget != NULL; widget = gtk_widget_get_parent (widget))
+  for (; widget != NULL; widget = scroll_route_get_parent (widget))
     {
       GtkScrolledWindow *self;
       GtkScrolledWindowBoundary *boundary;
@@ -1641,7 +1654,7 @@ _gtk_scrolled_window_boundary_release (GtkScrolledWindow      *self,
   if (session == 0)
     goto out;
 
-  for (GtkWidget *widget = GTK_WIDGET (self); widget; widget = gtk_widget_get_parent (widget))
+  for (GtkWidget *widget = GTK_WIDGET (self); widget; widget = scroll_route_get_parent (widget))
     {
       if (GTK_IS_SCROLLED_WINDOW (widget))
         g_ptr_array_add (chain, g_object_ref (widget));
@@ -1837,7 +1850,7 @@ _gtk_scrolled_window_boundary_route_input_full (GtkScrolledWindow               
   receivers = g_array_new (FALSE, FALSE, sizeof (GtkScrollRouteReceiver));
   holds = g_ptr_array_new_with_free_func (g_object_unref);
 
-  for (GtkWidget *widget = GTK_WIDGET (self); widget; widget = gtk_widget_get_parent (widget))
+  for (GtkWidget *widget = GTK_WIDGET (self); widget; widget = scroll_route_get_parent (widget))
     {
       GtkScrollRouteReceiver receiver;
       GtkScrolledWindowBoundary *receiver_priv;
@@ -2087,7 +2100,7 @@ scroll_input_begin (GtkScrolledWindow *self,
   priv->release_pending = FALSE;
   priv->touch_release_pending = FALSE;
 
-  for (GtkWidget *widget = GTK_WIDGET (self); widget; widget = gtk_widget_get_parent (widget))
+  for (GtkWidget *widget = GTK_WIDGET (self); widget; widget = scroll_route_get_parent (widget))
     {
       if (GTK_IS_SCROLLED_WINDOW (widget))
         g_ptr_array_add (chain, g_object_ref (widget));
