@@ -468,6 +468,49 @@ test_empty_contained_axis_stops_parent (void)
 }
 
 static void
+test_native_boundary_stops_routing (void)
+{
+  GtkScrolledWindow *outer;
+  GtkScrolledWindow *inner;
+  FixtureScrollable *child;
+  GtkWidget *anchor;
+  GtkWidget *popover;
+  GtkWidget *window;
+  GtkAdjustment *outer_vadjustment;
+
+  child = g_object_new (fixture_scrollable_get_type (), NULL);
+  inner = GTK_SCROLLED_WINDOW (gtk_scrolled_window_new ());
+  outer = GTK_SCROLLED_WINDOW (gtk_scrolled_window_new ());
+  anchor = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
+  popover = gtk_popover_new ();
+
+  gtk_scrolled_window_set_overscroll_behavior (outer,
+                                               GTK_ORIENTATION_VERTICAL,
+                                               GTK_OVERSCROLL_BEHAVIOR_CONTAIN);
+  gtk_scrolled_window_set_policy (inner, GTK_POLICY_EXTERNAL, GTK_POLICY_EXTERNAL);
+  gtk_popover_set_child (GTK_POPOVER (popover), GTK_WIDGET (inner));
+  gtk_widget_set_parent (popover, anchor);
+
+  g_assert_false (_gtk_scrolled_window_boundary_chain_uses_routing (GTK_WIDGET (inner)));
+
+  gtk_scrolled_window_set_child (inner, GTK_WIDGET (child));
+  window = create_window_for_scroller (outer, anchor);
+  gtk_popover_popup (GTK_POPOVER (popover));
+  allocate_test_window (window, 200, 200);
+
+  outer_vadjustment = gtk_scrolled_window_get_vadjustment (outer);
+  gtk_adjustment_configure (outer_vadjustment, 20, 0, 100, 1, 10, 10);
+  configure_at_end (inner);
+
+  _gtk_scrolled_window_begin_input (inner, GTK_SCROLL_INPUT_WHEEL, 1000000);
+  _gtk_scrolled_window_update_input (inner, 0, 1, 1010000);
+
+  g_assert_cmpfloat (gtk_adjustment_get_value (outer_vadjustment), ==, 20);
+
+  gtk_window_destroy (GTK_WINDOW (window));
+}
+
+static void
 test_release_returns_to_rest (void)
 {
   GtkScrolledWindow *scroller;
@@ -896,6 +939,8 @@ main (int   argc,
   g_test_add_func ("/scrolledwindow/overscroll/none", test_none_contains_without_presentation);
   g_test_add_func ("/scrolledwindow/overscroll/empty-contained-axis",
                    test_empty_contained_axis_stops_parent);
+  g_test_add_func ("/scrolledwindow/overscroll/native-boundary-stops-routing",
+                   test_native_boundary_stops_routing);
   g_test_add_func ("/scrolledwindow/overscroll/release-returns", test_release_returns_to_rest);
   g_test_add_func ("/scrolledwindow/overscroll/viewport-wrapper", test_viewport_wrapper);
   g_test_add_func ("/scrolledwindow/overscroll/text-view-content-moves",
