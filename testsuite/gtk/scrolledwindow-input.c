@@ -467,6 +467,135 @@ test_empty_contained_axis_stops_parent (void)
     }
 }
 
+static GtkWidget *
+create_nested_scroll_window (GtkScrolledWindow **outer,
+                             GtkScrolledWindow **inner)
+{
+  FixtureScrollable *child;
+  GtkWidget *window;
+  GtkAdjustment *adjustment;
+
+  child = g_object_new (fixture_scrollable_get_type (), NULL);
+  *inner = GTK_SCROLLED_WINDOW (gtk_scrolled_window_new ());
+  gtk_scrolled_window_set_policy (*inner, GTK_POLICY_EXTERNAL, GTK_POLICY_EXTERNAL);
+  gtk_scrolled_window_set_child (*inner, GTK_WIDGET (child));
+  gtk_widget_set_size_request (GTK_WIDGET (*inner), 200, 400);
+
+  *outer = GTK_SCROLLED_WINDOW (gtk_scrolled_window_new ());
+  window = create_window_for_scroller (*outer, GTK_WIDGET (*inner));
+  g_assert_true (GTK_IS_VIEWPORT (gtk_scrolled_window_get_child (*outer)));
+
+  adjustment = gtk_scrolled_window_get_vadjustment (*inner);
+  gtk_adjustment_configure (adjustment, 0, 0, 400, 1, 10, 200);
+  adjustment = gtk_scrolled_window_get_vadjustment (*outer);
+  g_assert_cmpfloat (gtk_adjustment_get_upper (adjustment) -
+                     gtk_adjustment_get_page_size (adjustment), >, 0);
+
+  return window;
+}
+
+static double
+get_outer_pull (GtkScrolledWindow *outer)
+{
+  double y = 0;
+
+  gtk_scrollable_get_overscroll (GTK_SCROLLABLE (gtk_scrolled_window_get_child (outer)),
+                                 NULL, &y);
+  return y;
+}
+
+static void
+test_nested_pull_origin_handoff (void)
+{
+  GtkScrolledWindow *outer;
+  GtkScrolledWindow *inner;
+  GtkWidget *window;
+  double first;
+  double second;
+  double third;
+  gint64 timestamp = 1100000;
+
+  window = create_nested_scroll_window (&outer, &inner);
+
+  _gtk_scrolled_window_begin_input (inner, GTK_SCROLL_INPUT_TOUCHPAD, 1000000);
+  _gtk_scrolled_window_update_input (inner, 0, -30, 1010000);
+  first = get_outer_pull (outer);
+  g_assert_cmpfloat (first, >, 0);
+
+  _gtk_scrolled_window_begin_input (outer, GTK_SCROLL_INPUT_TOUCHPAD, 1020000);
+  _gtk_scrolled_window_update_input (outer, 0, -10, 1030000);
+  second = get_outer_pull (outer);
+  g_assert_cmpfloat (second, >, first);
+
+  _gtk_scrolled_window_begin_input (inner, GTK_SCROLL_INPUT_TOUCHPAD, 1040000);
+  _gtk_scrolled_window_update_input (inner, 0, -10, 1050000);
+  third = get_outer_pull (outer);
+  g_assert_cmpfloat (third, >, second);
+  g_assert_cmpfloat (gtk_adjustment_get_value (gtk_scrolled_window_get_vadjustment (outer)), ==, 0);
+  g_assert_cmpfloat (gtk_adjustment_get_value (gtk_scrolled_window_get_vadjustment (inner)), ==, 0);
+
+  _gtk_scrolled_window_release_input (outer, 0, 0, 1060000);
+  g_assert_cmpfloat_with_epsilon (get_outer_pull (outer), third, 0.001);
+
+  _gtk_scrolled_window_update_input (inner, 0, 10, 1070000);
+  g_assert_cmpfloat (get_outer_pull (outer), <, third);
+
+  _gtk_scrolled_window_release_input (inner, 0, 0, timestamp);
+  while (_gtk_scrolled_window_advance_overscroll (outer, timestamp))
+    timestamp += 100000;
+  g_assert_cmpfloat (get_outer_pull (outer), ==, 0);
+
+  gtk_window_destroy (GTK_WINDOW (window));
+}
+
+static void
+test_nested_pull_zero_movement_release (void)
+{
+  GtkScrolledWindow *outer;
+  GtkScrolledWindow *inner;
+  GtkWidget *window;
+  double before;
+
+  window = create_nested_scroll_window (&outer, &inner);
+
+  _gtk_scrolled_window_begin_input (inner, GTK_SCROLL_INPUT_TOUCHPAD, 1000000);
+  _gtk_scrolled_window_update_input (inner, 0, -30, 1010000);
+  before = get_outer_pull (outer);
+  g_assert_cmpfloat (before, >, 0);
+
+  _gtk_scrolled_window_begin_input (outer, GTK_SCROLL_INPUT_TOUCHPAD, 1020000);
+  _gtk_scrolled_window_release_input (outer, 0, 0, 1030000);
+  g_assert_cmpfloat_with_epsilon (get_outer_pull (outer), before, 0.001);
+
+  _gtk_scrolled_window_update_input (inner, 0, -10, 1040000);
+  g_assert_cmpfloat (get_outer_pull (outer), >, before);
+
+  gtk_window_destroy (GTK_WINDOW (window));
+}
+
+static void
+test_nested_pull_incompatible_source (void)
+{
+  GtkScrolledWindow *outer;
+  GtkScrolledWindow *inner;
+  GtkWidget *window;
+  double before;
+
+  window = create_nested_scroll_window (&outer, &inner);
+
+  _gtk_scrolled_window_begin_input (inner, GTK_SCROLL_INPUT_TOUCHPAD, 1000000);
+  _gtk_scrolled_window_update_input (inner, 0, -30, 1010000);
+  before = get_outer_pull (outer);
+  g_assert_cmpfloat (before, >, 0);
+
+  _gtk_scrolled_window_begin_input (outer, GTK_SCROLL_INPUT_TOUCHSCREEN, 1020000);
+  _gtk_scrolled_window_update_input (outer, 0, -10, 1030000);
+  g_assert_cmpfloat (get_outer_pull (outer), >, 0);
+  g_assert_cmpfloat (get_outer_pull (outer), <, before);
+
+  gtk_window_destroy (GTK_WINDOW (window));
+}
+
 static void
 test_native_boundary_stops_routing (void)
 {
@@ -939,6 +1068,12 @@ main (int   argc,
   g_test_add_func ("/scrolledwindow/overscroll/none", test_none_contains_without_presentation);
   g_test_add_func ("/scrolledwindow/overscroll/empty-contained-axis",
                    test_empty_contained_axis_stops_parent);
+  g_test_add_func ("/scrolledwindow/overscroll/nested-origin-handoff",
+                   test_nested_pull_origin_handoff);
+  g_test_add_func ("/scrolledwindow/overscroll/nested-zero-movement-release",
+                   test_nested_pull_zero_movement_release);
+  g_test_add_func ("/scrolledwindow/overscroll/nested-incompatible-source",
+                   test_nested_pull_incompatible_source);
   g_test_add_func ("/scrolledwindow/overscroll/native-boundary-stops-routing",
                    test_native_boundary_stops_routing);
   g_test_add_func ("/scrolledwindow/overscroll/release-returns", test_release_returns_to_rest);

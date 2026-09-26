@@ -1703,6 +1703,75 @@ scroll_overscroll_next_sequence (void)
   return overscroll_sequence;
 }
 
+/* A pull belongs to the terminal scroller, even when its presentation moves
+ * the next event from a descendant scroller onto an ancestor (or back).
+ * Transfer the input session without resetting the terminal presentation.
+ */
+static gboolean
+scroll_overscroll_transfer_origin (GtkScrolledWindow                  *self,
+                                   GtkScrolledWindow                  *origin,
+                                   guint                               axis,
+                                   const GtkScrolledWindowScrollInput *input)
+{
+  GtkScrolledWindowBoundary *priv = _gtk_scrolled_window_get_boundary (self);
+  GtkScrolledWindowOverscrollOwner *owner = &priv->overscroll_axis[axis];
+  GtkScrolledWindowScrollableGeometry geometry;
+  GtkScrollRouteGeometry route;
+  GtkScrollMotionReply reply;
+  GtkScrollable *child = NULL;
+  GObject *old_origin = NULL;
+  guint64 sequence;
+  double mapping;
+  double scale;
+  gboolean ret = FALSE;
+
+  g_assert (owner->child != NULL);
+  g_assert (input->continuous && !input->inertia);
+
+  sequence = owner->event.sequence;
+  child = g_object_ref (owner->child);
+  old_origin = g_signal_group_dup_target (owner->origin_signals);
+
+  if (old_origin == NULL ||
+      (old_origin != G_OBJECT (origin) &&
+       !gtk_widget_is_ancestor (GTK_WIDGET (old_origin), GTK_WIDGET (origin)) &&
+       !gtk_widget_is_ancestor (GTK_WIDGET (origin), GTK_WIDGET (old_origin))) ||
+      owner->event.source != input->source ||
+      owner->generation != priv->route_generation ||
+      owner->event.generation != priv->route_generation ||
+      !scrollable_get_geometry (self, child, &geometry) ||
+      owner->child != child || owner->event.sequence != sequence ||
+      !scroll_overscroll_geometry_matches (&geometry, &owner->geometry, axis) ||
+      !(geometry.axes & (1 << axis)) ||
+      !scroll_motion_query (origin, GTK_WIDGET (self), &route) ||
+      owner->child != child || owner->event.sequence != sequence ||
+      !(route.axes & (1 << axis)) ||
+      route.adjustment[axis] != _gtk_scrolled_window_get_adjustment (self, axis) ||
+      gtk_adjustment_get_change_serial (route.adjustment[axis]) != owner->adjustment_serial)
+    goto out;
+
+  mapping = axis == 0 ? geometry.mapping_x : geometry.mapping_y;
+  scale = route.units_per_input[axis] / mapping;
+  if (!isfinite (scale) || scale == 0)
+    goto out;
+
+  owner->session = input->session;
+  owner->scale = scale;
+  owner->event.sequence = scroll_overscroll_next_sequence ();
+  owner->event.timestamp = input->timestamp;
+  owner->event.velocity_x = owner->event.velocity_y = 0;
+  owner->released = FALSE;
+  g_signal_group_set_target (owner->origin_signals, origin);
+
+  ret = scroll_overscroll_send (self, axis, GTK_SCROLL_MOTION_BEGIN, 0,
+                                input->timestamp, &reply);
+
+out:
+  g_clear_object (&old_origin);
+  g_clear_object (&child);
+  return ret;
+}
+
 static void
 scroll_overscroll_pull (GtkScrolledWindow                  *self,
                         GtkScrolledWindow                  *origin,
@@ -1901,12 +1970,24 @@ _gtk_scrolled_window_boundary_route_input_full (GtkScrolledWindow               
         {
           GtkScrolledWindowOverscrollOwner *owner = &receiver_priv->overscroll_axis[axis];
           GtkScrollMotionReply reply;
-          double scale = owner->scale;
+          double scale;
 
           if (owner->child == NULL)
             continue;
 
+          /* A release with no movement must not cancel another session's pull. */
+          if (delta[axis] == 0)
+            continue;
+
           if (input->inertia && owner->released)
+            continue;
+
+          if (eligible && !input->inertia &&
+              (owner->session != input->session || owner->released) &&
+              owner->event.source == input->source)
+            scroll_overscroll_transfer_origin (receiver, self, axis, input);
+
+          if (owner->child == NULL)
             continue;
 
           if (!scroll_overscroll_owner_is_at_edge (receiver, axis))
@@ -1929,37 +2010,13 @@ _gtk_scrolled_window_boundary_route_input_full (GtkScrolledWindow               
                 }
             }
 
-          if (!input->inertia && eligible && owner->released &&
-              owner->event.source == input->source)
-            {
-              GObject *origin = g_signal_group_dup_target (owner->origin_signals);
-
-              if (origin == G_OBJECT (self))
-                {
-                  owner->session = input->session;
-                  owner->event.sequence = scroll_overscroll_next_sequence ();
-                  owner->event.velocity_x = owner->event.velocity_y = 0;
-                  owner->released = FALSE;
-
-                  if (!scroll_overscroll_send (receiver, axis, GTK_SCROLL_MOTION_BEGIN, 0, input->timestamp, &reply))
-                    {
-                      delta[axis] = 0;
-                      g_clear_object (&origin);
-                      continue;
-                    }
-                }
-
-              g_clear_object (&origin);
-            }
-
           if (!eligible || owner->session != input->session || owner->released)
             {
               _gtk_scrolled_window_boundary_cancel (receiver, 1 << axis);
               continue;
             }
 
-          if (delta[axis] == 0)
-            continue;
+          scale = owner->scale;
 
           if (!scroll_overscroll_send (receiver, axis, GTK_SCROLL_MOTION_UNWIND, delta[axis], input->timestamp, &reply))
             {
