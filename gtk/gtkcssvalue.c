@@ -29,112 +29,136 @@ struct _GtkCssValue {
 
 G_DEFINE_BOXED_TYPE (GtkCssValue, gtk_css_value, gtk_css_value_ref, gtk_css_value_unref)
 
-#undef CSS_VALUE_ACCOUNTING
-
 #ifdef CSS_VALUE_ACCOUNTING
 static GHashTable *counters;
+static GHashTable *sizes;
+static GHashTable *shared_sizes;
 
 typedef struct
 {
-  guint all;
-  guint alive;
+  guint64 all;
+  guint64 alive;
+  guint64 requested;
+  guint64 live_bytes;
+  guint64 peak_bytes;
   guint computed;
   guint transitioned;
 } ValueAccounting;
 
+typedef struct
+{
+  ValueAccounting *counter;
+  gsize bytes;
+  guint users;
+} SharedAccounting;
+
 static void
 dump_value_counts (void)
 {
-  int col_widths[5] = { 0, strlen ("all"), strlen ("alive"), strlen ("computed"), strlen("transitioned") };
   GHashTableIter iter;
-  gpointer key;
-  gpointer value;
-  int sum_all = 0, sum_alive = 0, sum_computed = 0, sum_transitioned = 0;
+  gpointer key, value;
+  ValueAccounting total = { 0, };
 
+  g_print ("CSS value type,allocations,live,requested bytes,live bytes,peak bytes,computed,transitioned\n");
   g_hash_table_iter_init (&iter, counters);
   while (g_hash_table_iter_next (&iter, &key, &value))
     {
-       const char *class = key;
-       const ValueAccounting *c = value;
-       char *str;
+      const ValueAccounting *c = value;
 
-       sum_all += c->all;
-       sum_alive += c->alive;
-       sum_computed += c->computed;
-       sum_transitioned += c->transitioned;
+      total.all += c->all;
+      total.alive += c->alive;
+      total.requested += c->requested;
+      total.live_bytes += c->live_bytes;
+      total.peak_bytes += c->peak_bytes;
+      total.computed += c->computed;
+      total.transitioned += c->transitioned;
 
-       col_widths[0] = MAX (col_widths[0], strlen (class));
-
-       str = g_strdup_printf ("%'d", sum_all);
-       col_widths[1] = MAX (col_widths[1], strlen (str));
-       g_free (str);
-
-       str = g_strdup_printf ("%'d", sum_alive);
-       col_widths[2] = MAX (col_widths[2], strlen (str));
-       g_free (str);
-
-       str = g_strdup_printf ("%'d", sum_computed);
-       col_widths[3] = MAX (col_widths[3], strlen (str));
-       g_free (str);
-
-       str = g_strdup_printf ("%'d", sum_transitioned);
-       col_widths[4] = MAX (col_widths[4], strlen (str));
-       g_free (str);
-    }
-  /* Some spacing */
-  col_widths[0] += 4;
-  col_widths[1] += 4;
-  col_widths[2] += 4;
-  col_widths[3] += 4;
-  col_widths[4] += 4;
-
-  g_print("%*s%*s%*s%*s%*s\n", col_widths[0] + 1, " ",
-          col_widths[1] + 1, "All",
-          col_widths[2] + 1, "Alive",
-          col_widths[3] + 1, "Computed",
-          col_widths[4] + 1, "Transitioned");
-
-  g_hash_table_iter_init (&iter, counters);
-  while (g_hash_table_iter_next (&iter, &key, &value))
-    {
-       const char *class = key;
-       const ValueAccounting *c = value;
-
-       g_print ("%*s:", col_widths[0], class);
-       g_print (" %'*d", col_widths[1], c->all);
-       g_print (" %'*d", col_widths[2], c->alive);
-       g_print (" %'*d", col_widths[3], c->computed);
-       g_print (" %'*d", col_widths[4], c->transitioned);
-       g_print("\n");
+      g_print ("%s,%" G_GUINT64_FORMAT ",%" G_GUINT64_FORMAT ",%" G_GUINT64_FORMAT
+               ",%" G_GUINT64_FORMAT ",%" G_GUINT64_FORMAT ",%u,%u\n",
+               (const char *) key, c->all, c->alive, c->requested,
+               c->live_bytes, c->peak_bytes, c->computed, c->transitioned);
     }
 
-  g_print("%*s%'*d%'*d%'*d%'*d\n", col_widths[0] + 1, " ",
-          col_widths[1] + 1, sum_all,
-          col_widths[2] + 1, sum_alive,
-          col_widths[3] + 1, sum_computed,
-          col_widths[4] + 1, sum_transitioned);
+  g_print ("TOTAL,%" G_GUINT64_FORMAT ",%" G_GUINT64_FORMAT ",%" G_GUINT64_FORMAT
+           ",%" G_GUINT64_FORMAT ",%" G_GUINT64_FORMAT ",%u,%u\n",
+           total.all, total.alive, total.requested, total.live_bytes,
+           total.peak_bytes, total.computed, total.transitioned);
 }
 
 static ValueAccounting *
 get_accounting_data (const char *class)
 {
-  ValueAccounting *c;
+  ValueAccounting *counter;
 
-  if (!counters)
+  if (counters == NULL)
     {
       counters = g_hash_table_new (g_str_hash, g_str_equal);
+      sizes = g_hash_table_new (g_direct_hash, g_direct_equal);
+      shared_sizes = g_hash_table_new_full (g_direct_hash, g_direct_equal, NULL, g_free);
       atexit (dump_value_counts);
     }
-  c = g_hash_table_lookup (counters, class);
-  if (!c)
+
+  counter = g_hash_table_lookup (counters, class);
+  if (counter == NULL)
     {
-       c = g_new0 (ValueAccounting, 1);
-       g_hash_table_insert (counters, (gpointer)class, c);
+      counter = g_new0 (ValueAccounting, 1);
+      g_hash_table_insert (counters, (gpointer) class, counter);
     }
 
-  return c;
+  return counter;
+}
+
+static void
+account_bytes (ValueAccounting *counter,
+               gsize            bytes)
+{
+  counter->requested += bytes;
+  counter->live_bytes += bytes;
+  counter->peak_bytes = MAX (counter->peak_bytes, counter->live_bytes);
 }
 #endif
+
+void
+gtk_css_value_account_extra (GtkCssValue *value,
+                             gsize        bytes)
+{
+#ifdef CSS_VALUE_ACCOUNTING
+  ValueAccounting *counter = get_accounting_data (value->class->type_name);
+  gsize size = GPOINTER_TO_SIZE (g_hash_table_lookup (sizes, value));
+
+  g_hash_table_insert (sizes, value, GSIZE_TO_POINTER (size + bytes));
+  account_bytes (counter, bytes);
+#endif
+}
+
+void
+gtk_css_value_account_shared (GtkCssValue *value,
+                              gpointer     shared,
+                              gsize        bytes,
+                              gboolean     add)
+{
+#ifdef CSS_VALUE_ACCOUNTING
+  SharedAccounting *account = g_hash_table_lookup (shared_sizes, shared);
+
+  if (add)
+    {
+      if (account == NULL)
+        {
+          account = g_new0 (SharedAccounting, 1);
+          account->counter = get_accounting_data (value->class->type_name);
+          account->bytes = bytes;
+          account_bytes (account->counter, bytes);
+          g_hash_table_insert (shared_sizes, shared, account);
+        }
+      account->users++;
+    }
+  else if (account != NULL && --account->users == 0)
+    {
+      account->counter->live_bytes -= account->bytes;
+      g_hash_table_remove (shared_sizes, shared);
+    }
+#endif
+}
 
 GtkCssValue *
 gtk_css_value_alloc (const GtkCssValueClass *klass,
@@ -154,6 +178,8 @@ gtk_css_value_alloc (const GtkCssValueClass *klass,
     c = get_accounting_data (klass->type_name);
     c->all++;
     c->alive++;
+    account_bytes (c, size);
+    g_hash_table_insert (sizes, value, GSIZE_TO_POINTER (size));
   }
 #endif
 
@@ -186,6 +212,8 @@ void
 
     c = get_accounting_data (value->class->type_name);
     c->alive--;
+    c->live_bytes -= GPOINTER_TO_SIZE (g_hash_table_lookup (sizes, value));
+    g_hash_table_remove (sizes, value);
   }
 #endif
 

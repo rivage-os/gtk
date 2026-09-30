@@ -77,6 +77,12 @@ GType         gtk_css_value_get_type                  (void);
 
 GtkCssValue * gtk_css_value_alloc                     (const GtkCssValueClass     *klass,
                                                        gsize                       size);
+void          gtk_css_value_account_extra             (GtkCssValue                *value,
+                                                       gsize                       bytes);
+void          gtk_css_value_account_shared            (GtkCssValue                *value,
+                                                       gpointer                    shared,
+                                                       gsize                       bytes,
+                                                       gboolean                    add);
 #define gtk_css_value_new(name, klass) ((name *) gtk_css_value_alloc ((klass), sizeof (name)))
 
 GtkCssValue * (gtk_css_value_ref)                     (GtkCssValue                *value);
@@ -158,4 +164,3 @@ gtk_css_value_contains_current_color (const GtkCssValue *value)
 }
 
 G_END_DECLS
-

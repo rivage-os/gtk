@@ -53,9 +53,29 @@ struct _GtkCssValue {
   guint subproperty;
 };
 
+#ifdef CSS_VALUE_ACCOUNTING
+static gsize
+variable_storage_size (GtkCssVariableValue *value)
+{
+  gsize bytes = sizeof (*value) + value->n_references * sizeof (*value->references);
+
+  for (gsize i = 0; i < value->n_references; i++)
+    {
+      GtkCssVariableValueReference *reference = &value->references[i];
+
+      bytes += strlen (reference->name) + 1;
+      if (reference->fallback)
+        bytes += variable_storage_size (reference->fallback);
+    }
+
+  return bytes;
+}
+#endif
+
 static void
 gtk_css_value_reference_free (GtkCssValue *value)
 {
+  gtk_css_value_account_shared (value, value->value, 0, FALSE);
   gtk_css_variable_value_unref (value->value);
   if (value->file)
     g_object_unref (value->file);
@@ -381,6 +401,9 @@ _gtk_css_reference_value_new (GtkStyleProperty    *property,
   result = gtk_css_value_new (GtkCssValue, &GTK_CSS_VALUE_REFERENCE);
   result->property = property;
   result->value = gtk_css_variable_value_ref (value);
+#ifdef CSS_VALUE_ACCOUNTING
+  gtk_css_value_account_shared (result, value, variable_storage_size (value), TRUE);
+#endif
   result->contains_variables = TRUE;
 
   if (file)
