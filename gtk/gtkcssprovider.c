@@ -129,7 +129,48 @@ struct _GtkCssScanner
   GtkCssScanner *parent;
   GArray *media_features;
   guint skip_count;
+  guint diagnostics;
 };
+
+typedef struct
+{
+  GtkStyleProperty *property;
+  GFile *file;
+  GBytes *bytes;
+} GtkCssDeclarationKey;
+
+static guint
+declaration_key_hash (gconstpointer data)
+{
+  const GtkCssDeclarationKey *key = data;
+  guint hash = g_direct_hash (key->property);
+
+  hash = hash * 33 + (key->file ? g_file_hash (key->file) : 0);
+  return hash * 33 + g_bytes_hash (key->bytes);
+}
+
+static gboolean
+declaration_key_equal (gconstpointer a,
+                       gconstpointer b)
+{
+  const GtkCssDeclarationKey *left = a;
+  const GtkCssDeclarationKey *right = b;
+
+  return left->property == right->property &&
+         (left->file == right->file ||
+          (left->file && right->file && g_file_equal (left->file, right->file))) &&
+         g_bytes_equal (left->bytes, right->bytes);
+}
+
+static void
+declaration_key_free (gpointer data)
+{
+  GtkCssDeclarationKey *key = data;
+
+  g_clear_object (&key->file);
+  g_bytes_unref (key->bytes);
+  g_free (key);
+}
 
 struct _GtkCssProviderPrivate
 {
@@ -142,6 +183,7 @@ struct _GtkCssProviderPrivate
   GHashTable *symbolic_colors;
   GHashTable *keyframes;
   GHashTable *value_pool;
+  GHashTable *declaration_cache;
 
   GArray *rulesets;
   GtkCssSelectorTree *tree;
@@ -516,6 +558,8 @@ gtk_css_scanner_parser_error (GtkCssParser         *parser,
 {
   GtkCssScanner *scanner = user_data;
   GtkCssSection *section;
+
+  scanner->diagnostics++;
 
   section = gtk_css_section_new_with_bytes (gtk_css_parser_get_file (parser),
                                             gtk_css_parser_get_bytes (parser),
@@ -1262,7 +1306,10 @@ static void
 parse_declaration (GtkCssScanner *scanner,
                    GtkCssRuleset *ruleset)
 {
+  GtkCssProviderPrivate *priv = gtk_css_provider_get_instance_private (scanner->provider);
   GtkStyleProperty *property;
+  GBytes *cache_bytes = NULL;
+  guint diagnostics;
   char *name;
 
   /* advance the location over whitespace */
@@ -1336,7 +1383,9 @@ parse_declaration (GtkCssScanner *scanner,
           goto out;
         }
 
-      if (gtk_css_parser_has_references (scanner->parser))
+      diagnostics = scanner->diagnostics;
+
+      if (gtk_css_parser_has_references (scanner->parser, &cache_bytes))
         {
           GtkCssLocation start_location;
           GtkCssVariableValue *var_value;
@@ -1393,10 +1442,24 @@ parse_declaration (GtkCssScanner *scanner,
             }
 
           gtk_css_variable_value_unref (var_value);
+          g_clear_pointer (&cache_bytes, g_bytes_unref);
         }
       else
         {
-          value = _gtk_style_property_parse_value (property, scanner->parser);
+          GtkCssDeclarationKey key;
+
+          key.property = property;
+          key.file = gtk_css_parser_get_file (scanner->parser);
+          key.bytes = cache_bytes;
+
+          value = g_hash_table_lookup (priv->declaration_cache, &key);
+          if (value)
+            {
+              value = gtk_css_value_ref (value);
+              gtk_css_parser_skip_until (scanner->parser, GTK_CSS_TOKEN_EOF);
+            }
+          else
+            value = _gtk_style_property_parse_value (property, scanner->parser);
 
           if (value == NULL)
             goto out;
@@ -1420,6 +1483,21 @@ parse_declaration (GtkCssScanner *scanner,
         section = NULL;
 
       value = gtk_css_value_pool_intern (priv->value_pool, value);
+
+      if (cache_bytes && diagnostics == scanner->diagnostics)
+        {
+          GtkCssDeclarationKey key = { property, gtk_css_parser_get_file (scanner->parser), cache_bytes };
+
+          if (!g_hash_table_contains (priv->declaration_cache, &key))
+            {
+              GtkCssDeclarationKey *stored = g_new (GtkCssDeclarationKey, 1);
+
+              stored->property = property;
+              stored->file = key.file ? g_object_ref (key.file) : NULL;
+              stored->bytes = g_bytes_ref (cache_bytes);
+              g_hash_table_insert (priv->declaration_cache, stored, gtk_css_value_ref (value));
+            }
+        }
 
       if (GTK_IS_CSS_SHORTHAND_PROPERTY (property))
         {
@@ -1455,6 +1533,7 @@ parse_declaration (GtkCssScanner *scanner,
     }
 
 out:
+  g_clear_pointer (&cache_bytes, g_bytes_unref);
   g_free (name);
 
   gtk_css_parser_end_block (scanner->parser);
@@ -1614,7 +1693,13 @@ gtk_css_provider_load_internal (GtkCssProvider *self,
   before = GDK_PROFILER_CURRENT_TIME;
 
   if (parent == NULL)
-    priv->value_pool = gtk_css_value_pool_new ();
+    {
+      priv->value_pool = gtk_css_value_pool_new ();
+      priv->declaration_cache = g_hash_table_new_full (declaration_key_hash,
+                                                       declaration_key_equal,
+                                                       declaration_key_free,
+                                                       (GDestroyNotify) gtk_css_value_unref);
+    }
 
   priv->bytes = bytes;
 
@@ -1629,6 +1714,7 @@ gtk_css_provider_load_internal (GtkCssProvider *self,
 
   if (parent == NULL)
     {
+      g_clear_pointer (&priv->declaration_cache, g_hash_table_unref);
       g_clear_pointer (&priv->value_pool, g_hash_table_unref);
       gtk_css_provider_postprocess (self);
     }

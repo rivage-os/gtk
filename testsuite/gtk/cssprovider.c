@@ -154,6 +154,68 @@ test_update_media_features_after_style_sheet_is_loaded (void)
   g_free (rendered_css);
 }
 
+typedef struct
+{
+  guint count;
+  guint lines[2];
+} DiagnosticLocations;
+
+static void
+record_diagnostic_location (GtkCssProvider *provider,
+                            GtkCssSection  *section,
+                            const GError   *error,
+                            gpointer        data)
+{
+  DiagnosticLocations *locations = data;
+
+  g_assert_cmpuint (locations->count, <, G_N_ELEMENTS (locations->lines));
+  locations->lines[locations->count++] = gtk_css_section_get_start_location (section)->lines;
+}
+
+static void
+test_repeated_invalid_declarations (void)
+{
+  GtkCssProvider *provider = gtk_css_provider_new ();
+  DiagnosticLocations locations = { 0, };
+
+  g_signal_connect (provider, "parsing-error",
+                    G_CALLBACK (record_diagnostic_location), &locations);
+  gtk_css_provider_load_from_string (provider,
+                                     "a {\n"
+                                     "  color: bogus;\n"
+                                     "  color: bogus;\n"
+                                     "}\n");
+
+  g_assert_cmpuint (locations.count, ==, 2);
+  g_assert_cmpuint (locations.lines[0], ==, 1);
+  g_assert_cmpuint (locations.lines[1], ==, 2);
+
+  g_object_unref (provider);
+}
+
+static void
+test_repeated_declarations_reload (void)
+{
+  GtkCssProvider *provider = gtk_css_provider_new ();
+  char *css;
+
+  gtk_css_provider_load_from_string (provider,
+                                     "a { border-radius: 2px 3px; margin: var(--a, 1px); }"
+                                     "b { border-radius: 2px 3px; margin: var(--b, 2px); }");
+  css = gtk_css_provider_to_string (provider);
+  g_assert_nonnull (strstr (css, "var(--a, 1px)"));
+  g_assert_nonnull (strstr (css, "var(--b, 2px)"));
+  g_free (css);
+
+  gtk_css_provider_load_from_string (provider,
+                                     "c { border-radius: 5px; border-radius: 5px; }");
+  css = gtk_css_provider_to_string (provider);
+  g_assert_null (strstr (css, "var(--a"));
+  g_assert_nonnull (strstr (css, "5px"));
+  g_free (css);
+  g_object_unref (provider);
+}
+
 int
 main (int argc, char *argv[])
 {
@@ -167,6 +229,8 @@ main (int argc, char *argv[])
   g_test_add_func ("/cssprovider/load-with-negating-media-query", test_load_with_negating_media_query);
   g_test_add_func ("/cssprovider/load-with-and-media-query", test_load_with_and_media_query);
   g_test_add_func ("/cssprovider/update-media-features-after-style-sheet-is-loaded", test_update_media_features_after_style_sheet_is_loaded);
+  g_test_add_func ("/cssprovider/repeated-invalid-declarations", test_repeated_invalid_declarations);
+  g_test_add_func ("/cssprovider/repeated-declarations-reload", test_repeated_declarations_reload);
 
   return g_test_run ();
 }

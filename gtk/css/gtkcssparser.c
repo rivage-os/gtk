@@ -1406,14 +1406,20 @@ gtk_css_parser_consume_any (GtkCssParser            *parser,
 }
 
 gboolean
-gtk_css_parser_has_references (GtkCssParser *self)
+gtk_css_parser_has_references (GtkCssParser *self,
+                               GBytes      **value_bytes)
 {
   GtkCssTokenizer *tokenizer = get_tokenizer (self);
   gboolean ret = FALSE;
+  gboolean have_start = FALSE;
+  gsize start = 0;
   int inner_blocks = 0, i;
 
   /* We don't want gtk_css_parser_ensure_token to expand references on us here */
   g_assert (self->n_refs == 0);
+
+  if (value_bytes)
+    *value_bytes = NULL;
 
   gtk_css_tokenizer_save (tokenizer);
 
@@ -1421,6 +1427,12 @@ gtk_css_parser_has_references (GtkCssParser *self)
       const GtkCssToken *token;
 
       token = gtk_css_parser_get_token (self);
+
+      if (!have_start)
+        {
+          start = self->location.bytes;
+          have_start = TRUE;
+        }
 
       if (inner_blocks == 0)
         {
@@ -1481,6 +1493,14 @@ gtk_css_parser_has_references (GtkCssParser *self)
          !gtk_css_parser_has_token (self, GTK_CSS_TOKEN_CLOSE_CURLY));
 
 done:
+  if (!ret && value_bytes)
+    {
+      GBytes *bytes = gtk_css_tokenizer_get_bytes (tokenizer);
+      gsize end = self->location.bytes;
+
+      *value_bytes = g_bytes_new_from_bytes (bytes, start, end - start);
+    }
+
   for (i = 0; i < inner_blocks; i++)
     gtk_css_parser_end_block (self);
 

@@ -329,7 +329,7 @@ gtk_css_keyframes_parse_declaration (GtkCssKeyframes *keyframes,
       return FALSE;
     }
 
-  if (gtk_css_parser_has_references (parser))
+  if (gtk_css_parser_has_references (parser, NULL))
     {
       GtkCssVariableValue *var_value;
 
