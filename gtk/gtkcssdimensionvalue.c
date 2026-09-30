@@ -127,7 +127,7 @@ gtk_css_dimension_value_parse (GtkCssParser           *parser,
       return NULL;
     }
 
-  result = gtk_css_dimension_value_new (number, unit);
+  result = gtk_css_dimension_value_new_for_parser (parser, number, unit);
   gtk_css_parser_consume_token (parser);
 
   return result;

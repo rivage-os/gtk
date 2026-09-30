@@ -71,6 +71,16 @@ void                    gtk_css_parser_unref                    (GtkCssParser   
 
 GFile *                 gtk_css_parser_get_file                 (GtkCssParser                   *self) G_GNUC_PURE;
 GBytes *                gtk_css_parser_get_bytes                (GtkCssParser                   *self) G_GNUC_PURE;
+GHashTable *            gtk_css_parser_get_literal_cache        (GtkCssParser                   *self,
+                                                                 GHashFunc                       hash,
+                                                                 GEqualFunc                      equal,
+                                                                 GDestroyNotify                  key_free,
+                                                                 GDestroyNotify                  value_free);
+GHashTable *            gtk_css_parser_get_composite_cache      (GtkCssParser                   *self,
+                                                                 guint                           kind,
+                                                                 GHashFunc                       hash,
+                                                                 GEqualFunc                      equal,
+                                                                 GDestroyNotify                  key_free);
 GFile *                 gtk_css_parser_resolve_url              (GtkCssParser                   *self,
                                                                  const char                     *url);
 
@@ -183,4 +193,3 @@ void                    gtk_css_parser_get_expanding_variables (GtkCssParser    
 #define GTK_CSS_PARSER_DEBUG_CSS (1 << 20)
 
 G_END_DECLS
-

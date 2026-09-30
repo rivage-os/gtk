@@ -166,6 +166,51 @@ _gtk_css_corner_value_new (GtkCssValue *x,
   return result;
 }
 
+static guint
+corner_literal_hash (gconstpointer data)
+{
+  const GtkCssValue *value = data;
+
+  return g_direct_hash (value->x) * 33 + g_direct_hash (value->y);
+}
+
+static gboolean
+corner_literal_equal (gconstpointer a,
+                      gconstpointer b)
+{
+  const GtkCssValue *left = a;
+  const GtkCssValue *right = b;
+
+  return left->x == right->x && left->y == right->y;
+}
+
+static GtkCssValue *
+corner_value_new_for_parser (GtkCssParser *parser,
+                             GtkCssValue  *x,
+                             GtkCssValue  *y)
+{
+  GHashTable *cache = gtk_css_parser_get_composite_cache (parser, 0,
+                                                          corner_literal_hash,
+                                                          corner_literal_equal,
+                                                          (GDestroyNotify) gtk_css_value_unref);
+  GtkCssValue key = { 0, };
+  GtkCssValue *result;
+
+  key.x = x;
+  key.y = y;
+  result = g_hash_table_lookup (cache, &key);
+  if (result)
+    {
+      gtk_css_value_unref (x);
+      gtk_css_value_unref (y);
+      return gtk_css_value_ref (result);
+    }
+
+  result = _gtk_css_corner_value_new (x, y);
+  g_hash_table_insert (cache, gtk_css_value_ref (result), result);
+  return result;
+}
+
 GtkCssValue *
 _gtk_css_corner_value_parse (GtkCssParser *parser)
 {
@@ -193,7 +238,7 @@ _gtk_css_corner_value_parse (GtkCssParser *parser)
         }
     }
 
-  return _gtk_css_corner_value_new (x, y);
+  return corner_value_new_for_parser (parser, x, y);
 }
 
 double
@@ -225,4 +270,3 @@ gtk_css_corner_value_is_zero (const GtkCssValue *corner)
   return gtk_css_dimension_value_is_zero (corner->x) &&
          gtk_css_dimension_value_is_zero (corner->y);
 }
-

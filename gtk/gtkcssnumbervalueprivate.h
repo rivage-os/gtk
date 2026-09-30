@@ -49,6 +49,9 @@ typedef struct
 
 GtkCssValue *   gtk_css_dimension_value_new         (double                  value,
                                                      GtkCssUnit              unit);
+GtkCssValue *   gtk_css_dimension_value_new_for_parser (GtkCssParser          *parser,
+                                                        double                 value,
+                                                        GtkCssUnit             unit);
 
 GtkCssValue *   gtk_css_number_value_new            (double                  value,
                                                      GtkCssUnit              unit);
@@ -93,4 +96,3 @@ GtkCssValue *   gtk_css_math_value_new              (guint                    ty
                                                      guint                    n_values);
 
 G_END_DECLS
-

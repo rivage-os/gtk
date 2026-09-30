@@ -129,6 +129,8 @@ struct _GtkCssParser
   gsize n_refs;
   gsize next_ref;
   gboolean var_fallback;
+  GHashTable *literal_cache;
+  GHashTable *composite_cache[2];
 };
 
 static inline GtkCssTokenizer *
@@ -244,6 +246,9 @@ gtk_css_parser_finalize (GtkCssParser *self)
     g_critical ("Finalizing CSS parser with %" G_GSIZE_FORMAT " remaining blocks", gtk_css_parser_blocks_get_size (&self->blocks));
   gtk_css_parser_blocks_clear (&self->blocks);
   gtk_css_token_clear (&self->token);
+  g_clear_pointer (&self->literal_cache, g_hash_table_unref);
+  for (guint i = 0; i < G_N_ELEMENTS (self->composite_cache); i++)
+    g_clear_pointer (&self->composite_cache[i], g_hash_table_unref);
 
   g_free (self);
 }
@@ -282,6 +287,34 @@ GBytes *
 gtk_css_parser_get_bytes (GtkCssParser *self)
 {
   return gtk_css_tokenizer_get_bytes (gtk_css_tokenizers_get (&self->tokenizers, 0)->tokenizer);
+}
+
+GHashTable *
+gtk_css_parser_get_literal_cache (GtkCssParser  *self,
+                                  GHashFunc      hash,
+                                  GEqualFunc     equal,
+                                  GDestroyNotify key_free,
+                                  GDestroyNotify value_free)
+{
+  if (self->literal_cache == NULL)
+    self->literal_cache = g_hash_table_new_full (hash, equal, key_free, value_free);
+
+  return self->literal_cache;
+}
+
+GHashTable *
+gtk_css_parser_get_composite_cache (GtkCssParser  *self,
+                                    guint          kind,
+                                    GHashFunc      hash,
+                                    GEqualFunc     equal,
+                                    GDestroyNotify key_free)
+{
+  g_return_val_if_fail (kind < G_N_ELEMENTS (self->composite_cache), NULL);
+
+  if (self->composite_cache[kind] == NULL)
+    self->composite_cache[kind] = g_hash_table_new_full (hash, equal, key_free, NULL);
+
+  return self->composite_cache[kind];
 }
 
 /**

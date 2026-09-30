@@ -173,6 +173,51 @@ _gtk_css_position_value_new (GtkCssValue *x,
   return result;
 }
 
+static guint
+position_literal_hash (gconstpointer data)
+{
+  const GtkCssValue *value = data;
+
+  return g_direct_hash (value->x) * 33 + g_direct_hash (value->y);
+}
+
+static gboolean
+position_literal_equal (gconstpointer a,
+                        gconstpointer b)
+{
+  const GtkCssValue *left = a;
+  const GtkCssValue *right = b;
+
+  return left->x == right->x && left->y == right->y;
+}
+
+static GtkCssValue *
+position_value_new_for_parser (GtkCssParser *parser,
+                               GtkCssValue  *x,
+                               GtkCssValue  *y)
+{
+  GHashTable *cache = gtk_css_parser_get_composite_cache (parser, 1,
+                                                          position_literal_hash,
+                                                          position_literal_equal,
+                                                          (GDestroyNotify) gtk_css_value_unref);
+  GtkCssValue key = { 0, };
+  GtkCssValue *result;
+
+  key.x = x;
+  key.y = y;
+  result = g_hash_table_lookup (cache, &key);
+  if (result)
+    {
+      gtk_css_value_unref (x);
+      gtk_css_value_unref (y);
+      return gtk_css_value_ref (result);
+    }
+
+  result = _gtk_css_position_value_new (x, y);
+  g_hash_table_insert (cache, gtk_css_value_ref (result), result);
+  return result;
+}
+
 static GtkCssValue *
 position_value_parse (GtkCssParser *parser, gboolean try)
 {
@@ -285,7 +330,7 @@ position_value_parse (GtkCssParser *parser, gboolean try)
         }
     }
 
-  return _gtk_css_position_value_new (x, y);
+  return position_value_new_for_parser (parser, x, y);
 }
 
 GtkCssValue *
@@ -323,7 +368,7 @@ gtk_css_position_value_parse_spacing (GtkCssParser *parser)
       y = gtk_css_value_ref (x);
     }
 
-  return _gtk_css_position_value_new (x, y);
+  return position_value_new_for_parser (parser, x, y);
 }
 
 double
@@ -345,4 +390,3 @@ _gtk_css_position_value_get_y (const GtkCssValue *position,
 
   return gtk_css_number_value_get (position->y, one_hundred_percent);
 }
-

@@ -786,6 +786,54 @@ gtk_css_dimension_value_new (double     value,
   return result;
 }
 
+typedef struct
+{
+  guint64 bits;
+  GtkCssUnit unit;
+} GtkCssNumberLiteral;
+
+static guint
+number_literal_hash (gconstpointer data)
+{
+  const GtkCssNumberLiteral *literal = data;
+
+  return (guint) (literal->bits ^ (literal->bits >> 32)) * 33 + literal->unit;
+}
+
+static gboolean
+number_literal_equal (gconstpointer a,
+                      gconstpointer b)
+{
+  const GtkCssNumberLiteral *left = a;
+  const GtkCssNumberLiteral *right = b;
+
+  return left->bits == right->bits && left->unit == right->unit;
+}
+
+GtkCssValue *
+gtk_css_dimension_value_new_for_parser (GtkCssParser *parser,
+                                        double        value,
+                                        GtkCssUnit    unit)
+{
+  GHashTable *cache;
+  GtkCssNumberLiteral key;
+  GtkCssValue *result;
+
+  memcpy (&key.bits, &value, sizeof (key.bits));
+  key.unit = unit;
+  cache = gtk_css_parser_get_literal_cache (parser, number_literal_hash,
+                                            number_literal_equal, g_free,
+                                            (GDestroyNotify) gtk_css_value_unref);
+
+  result = g_hash_table_lookup (cache, &key);
+  if (result)
+    return gtk_css_value_ref (result);
+
+  result = gtk_css_dimension_value_new (value, unit);
+  g_hash_table_insert (cache, g_memdup2 (&key, sizeof (key)), gtk_css_value_ref (result));
+  return result;
+}
+
 /*
  * gtk_css_number_value_get_calc_term_order:
  * @value: Value to compute order for
