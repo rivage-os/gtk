@@ -47,7 +47,7 @@ typedef struct {
   GtkCssStyle        *style;
   GtkCssStyle        *parent_style;
   GtkCssVariableSet  *variables;
-  GtkCssValue       **shorthands;
+  GHashTable         *shorthands;
 } GtkCssComputeContext;
 
 struct _GtkCssValueClass {

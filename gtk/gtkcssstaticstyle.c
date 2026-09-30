@@ -852,7 +852,6 @@ gtk_css_lookup_resolve (GtkCssLookup      *lookup,
                         GtkCssStyle       *parent_style)
 {
   GtkCssStyle *style = (GtkCssStyle *)sstyle;
-  GtkCssValue *shorthands[GTK_CSS_SHORTHAND_PROPERTY_N_PROPERTIES] = { NULL, };
   GtkCssComputeContext context = { NULL, };
 
   gtk_internal_return_if_fail (lookup != NULL);
@@ -892,7 +891,6 @@ gtk_css_lookup_resolve (GtkCssLookup      *lookup,
   context.style = (GtkCssStyle *) sstyle;
   context.parent_style = parent_style;
   context.variables = NULL;
-  context.shorthands = shorthands;
 
   if (_gtk_bitmask_is_empty (_gtk_css_lookup_get_set_values (lookup)))
     {
@@ -986,11 +984,7 @@ gtk_css_lookup_resolve (GtkCssLookup      *lookup,
 resolve:
   gtk_css_style_resolve_used_values (style, &context);
 
-  for (unsigned int i = 0; i < GTK_CSS_SHORTHAND_PROPERTY_N_PROPERTIES; i++)
-    {
-      if (shorthands[i])
-        gtk_css_value_unref (shorthands[i]);
-    }
+  g_clear_pointer (&context.shorthands, g_hash_table_unref);
 }
 
 GtkCssStyle *

@@ -1,0 +1,16 @@
+:root {
+  --first: 2px;
+  --second: 7px;
+  --cycle: var(--cycle);
+}
+
+label.first {
+  margin: var(--first);
+  margin-left: 9px;
+  padding: var(--cycle, 3px);
+}
+
+label.second {
+  margin: var(--second);
+  padding: var(--cycle, 5px);
+}

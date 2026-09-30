@@ -342,23 +342,20 @@ gtk_css_keyframes_parse_declaration (GtkCssKeyframes *keyframes,
           GtkCssShorthandProperty *shorthand = GTK_CSS_SHORTHAND_PROPERTY (property);
           guint i, n;
           GtkCssValue **values;
+          GtkCssValue *reference;
 
           n = _gtk_css_shorthand_property_get_n_subproperties (shorthand);
 
           values = g_new (GtkCssValue *, n);
+          reference = _gtk_css_reference_value_new (property,
+                                                    var_value,
+                                                    gtk_css_parser_get_file (parser));
 
           for (i = 0; i < n; i++)
-            {
-              GtkCssValue *child =
-                _gtk_css_reference_value_new (property,
-                                              var_value,
-                                              gtk_css_parser_get_file (parser));
-              _gtk_css_reference_value_set_subproperty (child, i);
-
-              values[i] = _gtk_css_array_value_get_nth (child, i);
-            }
+            values[i] = gtk_css_value_ref (reference);
 
           value = _gtk_css_array_value_new_from_array (values, n);
+          gtk_css_value_unref (reference);
           g_free (values);
         }
       else
@@ -684,20 +681,24 @@ _gtk_css_keyframes_compute (GtkCssKeyframes  *keyframes,
   context.style = style;
   context.parent_style = parent_style;
 
-  for (p = 0; p < resolved->n_properties; p++)
+  for (k = 0; k < resolved->n_keyframes; k++)
     {
-      for (k = 0; k < resolved->n_keyframes; k++)
+      context.variables = keyframes->variables ? keyframes->variables[k] : NULL;
+      if (context.shorthands)
+        g_hash_table_remove_all (context.shorthands);
+
+      for (p = 0; p < resolved->n_properties; p++)
         {
           if (KEYFRAMES_VALUE (keyframes, k, p) == NULL)
             continue;
-
-          context.variables = keyframes->variables ? keyframes->variables[k] : NULL;
 
           KEYFRAMES_VALUE (resolved, k, p) =  gtk_css_value_compute (KEYFRAMES_VALUE (keyframes, k, p),
                                                                      resolved->property_ids[p],
                                                                      &context);
         }
     }
+
+  g_clear_pointer (&context.shorthands, g_hash_table_unref);
 
   if (keyframes->variables)
     {

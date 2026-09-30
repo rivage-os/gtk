@@ -1369,23 +1369,20 @@ parse_declaration (GtkCssScanner *scanner,
               GtkCssShorthandProperty *shorthand = GTK_CSS_SHORTHAND_PROPERTY (property);
               guint i, n;
               GtkCssValue **values;
+              GtkCssValue *reference;
 
               n = _gtk_css_shorthand_property_get_n_subproperties (shorthand);
 
               values = g_new (GtkCssValue *, n);
+              reference = _gtk_css_reference_value_new (property,
+                                                        var_value,
+                                                        gtk_css_parser_get_file (scanner->parser));
 
               for (i = 0; i < n; i++)
-                {
-                  GtkCssValue *child =
-                    _gtk_css_reference_value_new (property,
-                                                  var_value,
-                                                  gtk_css_parser_get_file (scanner->parser));
-                  _gtk_css_reference_value_set_subproperty (child, i);
-
-                  values[i] = _gtk_css_array_value_get_nth (child, i);
-                }
+                values[i] = gtk_css_value_ref (reference);
 
               value = _gtk_css_array_value_new_from_array (values, n);
+              gtk_css_value_unref (reference);
               g_free (values);
             }
           else

@@ -50,7 +50,6 @@ struct _GtkCssValue {
   GtkStyleProperty *property;
   GtkCssVariableValue *value;
   GFile *file;
-  guint subproperty;
 };
 
 #ifdef CSS_VALUE_ACCOUNTING
@@ -282,14 +281,29 @@ gtk_css_value_reference_compute (GtkCssValue          *value,
 {
   GtkCssValue *result = NULL, *computed;
   GtkCssRefs refs;
-  guint shorthand_id = G_MAXUINT;
+  guint subproperty = G_MAXUINT;
 
   if (GTK_IS_CSS_SHORTHAND_PROPERTY (value->property))
     {
-      shorthand_id = _gtk_css_shorthand_property_get_id (GTK_CSS_SHORTHAND_PROPERTY (value->property));
-      if (context->shorthands && context->shorthands[shorthand_id])
+      GtkCssShorthandProperty *shorthand = GTK_CSS_SHORTHAND_PROPERTY (value->property);
+
+      for (guint i = 0; i < _gtk_css_shorthand_property_get_n_subproperties (shorthand); i++)
         {
-          result = gtk_css_value_ref (context->shorthands[shorthand_id]);
+          GtkCssStyleProperty *child = _gtk_css_shorthand_property_get_subproperty (shorthand, i);
+
+          if (_gtk_css_style_property_get_id (child) == property_id)
+            {
+              subproperty = i;
+              break;
+            }
+        }
+
+      g_assert (subproperty != G_MAXUINT);
+
+      if (context->shorthands &&
+          (result = g_hash_table_lookup (context->shorthands, value)))
+        {
+          result = gtk_css_value_ref (result);
           goto pick_subproperty;
         }
     }
@@ -332,18 +346,18 @@ gtk_css_value_reference_compute (GtkCssValue          *value,
   if (result == NULL)
     result = _gtk_css_unset_value_new ();
 
-  if (shorthand_id != G_MAXUINT)
+  if (subproperty != G_MAXUINT)
     {
       GtkCssValue *sub;
 
-      if (context->shorthands)
-        {
-          g_assert (context->shorthands[shorthand_id] == NULL);
-          context->shorthands[shorthand_id] = gtk_css_value_ref (result);
-        }
+      if (context->shorthands == NULL)
+        context->shorthands = g_hash_table_new_full (g_direct_hash, g_direct_equal,
+                                                     NULL, (GDestroyNotify) gtk_css_value_unref);
+
+      g_hash_table_insert (context->shorthands, value, gtk_css_value_ref (result));
 
 pick_subproperty:
-      sub = gtk_css_value_ref (_gtk_css_array_value_get_nth (result, value->subproperty));
+      sub = gtk_css_value_ref (_gtk_css_array_value_get_nth (result, subproperty));
       gtk_css_value_unref (result);
       result = sub;
     }
@@ -413,13 +427,3 @@ _gtk_css_reference_value_new (GtkStyleProperty    *property,
 
   return result;
 }
-
-void
-_gtk_css_reference_value_set_subproperty (GtkCssValue *value,
-                                          guint        property)
-{
-  g_assert (GTK_IS_CSS_SHORTHAND_PROPERTY (value->property));
-
-  value->subproperty = property;
-}
-

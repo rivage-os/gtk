@@ -647,13 +647,11 @@ void
 gtk_css_animated_style_recompute (GtkCssAnimatedStyle *style)
 {
   GtkCssComputeContext context = { NULL, };
-  GtkCssValue *shorthands[GTK_CSS_SHORTHAND_PROPERTY_N_PROPERTIES] = { NULL, };
 
   context.provider = style->provider;
   context.style = (GtkCssStyle *) style;
   context.parent_style = style->parent_style;
   context.variables = NULL;
-  context.shorthands = shorthands;
 
   gtk_css_core_values_recompute (style, &context);
   gtk_css_background_values_recompute (style, &context);
@@ -668,11 +666,7 @@ gtk_css_animated_style_recompute (GtkCssAnimatedStyle *style)
   gtk_css_size_values_recompute (style, &context);
   gtk_css_other_values_recompute (style, &context);
 
-  for (unsigned int i = 0; i < GTK_CSS_SHORTHAND_PROPERTY_N_PROPERTIES; i++)
-    {
-      if (shorthands[i])
-        gtk_css_value_unref (shorthands[i]);
-    }
+  g_clear_pointer (&context.shorthands, g_hash_table_unref);
 }
 
 GtkCssVariableValue *

@@ -29,7 +29,5 @@ G_BEGIN_DECLS
 GtkCssValue *_gtk_css_reference_value_new             (GtkStyleProperty    *property,
                                                        GtkCssVariableValue *value,
                                                        GFile               *file);
-void         _gtk_css_reference_value_set_subproperty (GtkCssValue         *value,
-                                                       guint                property);
 
 G_END_DECLS
