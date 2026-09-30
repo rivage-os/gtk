@@ -1,0 +1,51 @@
+@keyframes move {
+  from {
+    margin-bottom: var(--space, 1px);
+    margin-left: var(--space, 1px);
+    margin-right: var(--space, 1px);
+    margin-top: var(--space, 1px);
+  }
+  to {
+    margin-bottom: var(--other, 2px);
+    margin-left: var(--other, 2px);
+    margin-right: var(--other, 2px);
+    margin-top: var(--other, 2px);
+  }
+}
+
+c {
+  background-position: left top, right bottom;
+  border-bottom-left-radius: 3px;
+  border-bottom-right-radius: 2px;
+  border-top-left-radius: 2px;
+  border-top-right-radius: 3px;
+  transition-timing-function: ease-in, ease-out;
+}
+
+a {
+  background-position: left top, right bottom;
+  border-bottom-left-radius: 3px;
+  border-bottom-right-radius: 2px;
+  border-top-left-radius: 2px;
+  border-top-right-radius: 3px;
+  margin-bottom: var(--space);
+  margin-left: 8px;
+  margin-right: var(--space);
+  margin-top: var(--space);
+  transition-timing-function: ease-in, ease-out;
+  --space: 4px;
+}
+
+b {
+  background-position: left top, right bottom;
+  border-bottom-left-radius: 3px;
+  border-bottom-right-radius: 2px;
+  border-top-left-radius: 2px;
+  border-top-right-radius: 3px;
+  margin-bottom: var(--space);
+  margin-left: var(--space);
+  margin-right: var(--space);
+  margin-top: var(--space);
+  transition-timing-function: ease-in, ease-out;
+  --space: 6px;
+}

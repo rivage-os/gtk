@@ -257,7 +257,8 @@ keyframes_set_value (GtkCssKeyframes     *keyframes,
 static gboolean
 gtk_css_keyframes_parse_declaration (GtkCssKeyframes *keyframes,
                                      guint            k,
-                                     GtkCssParser    *parser)
+                                     GtkCssParser    *parser,
+                                     GHashTable      *value_pool)
 {
   GtkStyleProperty *property;
   GtkCssValue *value;
@@ -383,6 +384,8 @@ gtk_css_keyframes_parse_declaration (GtkCssKeyframes *keyframes,
       return FALSE;
     }
 
+  value = gtk_css_value_pool_intern (value_pool, value);
+
   if (GTK_IS_CSS_SHORTHAND_PROPERTY (property))
     {
       GtkCssShorthandProperty *shorthand = GTK_CSS_SHORTHAND_PROPERTY (property);
@@ -441,7 +444,8 @@ gtk_css_keyframes_copy_keyframe (GtkCssKeyframes *keyframes,
 static gboolean
 gtk_css_keyframes_parse_block (GtkCssKeyframes *keyframes,
                                guint            k,
-                               GtkCssParser    *parser)
+                               GtkCssParser    *parser,
+                               GHashTable      *value_pool)
 {
   if (!gtk_css_parser_has_token (parser, GTK_CSS_TOKEN_OPEN_CURLY))
     {
@@ -454,7 +458,7 @@ gtk_css_keyframes_parse_block (GtkCssKeyframes *keyframes,
   while (!gtk_css_parser_has_token (parser, GTK_CSS_TOKEN_EOF))
     {
       gtk_css_parser_start_semicolon_block (parser, GTK_CSS_TOKEN_EOF);
-      gtk_css_keyframes_parse_declaration (keyframes, k, parser);
+      gtk_css_keyframes_parse_declaration (keyframes, k, parser, value_pool);
       gtk_css_parser_end_block (parser);
     }
 
@@ -467,7 +471,8 @@ gtk_css_keyframes_parse_block (GtkCssKeyframes *keyframes,
 }
 
 GtkCssKeyframes *
-_gtk_css_keyframes_parse (GtkCssParser *parser)
+_gtk_css_keyframes_parse (GtkCssParser *parser,
+                          GHashTable   *value_pool)
 {
   GtkCssKeyframes *keyframes;
   double progress;
@@ -518,7 +523,7 @@ _gtk_css_keyframes_parse (GtkCssParser *parser)
 
       k = gtk_css_keyframes_add_keyframe (keyframes, g_array_index (selectors, double, 0));
 
-      if (!gtk_css_keyframes_parse_block (keyframes, k, parser))
+      if (!gtk_css_keyframes_parse_block (keyframes, k, parser, value_pool))
         {
           g_clear_pointer (&keyframes, _gtk_css_keyframes_unref);
           goto done;

@@ -146,6 +146,32 @@ done:
   gtk_css_value_unref (center);
 }
 
+static guint
+gtk_css_value_position_pool_hash (const GtkCssValue *value)
+{
+  return 0;
+}
+
+static gboolean
+gtk_css_value_position_pool_equal (const GtkCssValue *a,
+                                  const GtkCssValue *b)
+{
+  return TRUE;
+}
+
+static guint
+gtk_css_value_position_pool_n_children (const GtkCssValue *value)
+{
+  return 2;
+}
+
+static GtkCssValue **
+gtk_css_value_position_pool_child (GtkCssValue *value,
+                                  guint        index)
+{
+  return index == 0 ? &value->x : &value->y;
+}
+
 static const GtkCssValueClass GTK_CSS_VALUE_POSITION = {
   "GtkCssPositionValue",
   gtk_css_value_position_free,
@@ -155,7 +181,11 @@ static const GtkCssValueClass GTK_CSS_VALUE_POSITION = {
   gtk_css_value_position_transition,
   NULL,
   NULL,
-  gtk_css_value_position_print
+  gtk_css_value_position_print,
+  gtk_css_value_position_pool_hash,
+  gtk_css_value_position_pool_equal,
+  gtk_css_value_position_pool_n_children,
+  gtk_css_value_position_pool_child
 };
 
 GtkCssValue *

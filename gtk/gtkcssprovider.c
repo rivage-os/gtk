@@ -141,6 +141,7 @@ struct _GtkCssProviderPrivate
 
   GHashTable *symbolic_colors;
   GHashTable *keyframes;
+  GHashTable *value_pool;
 
   GArray *rulesets;
   GtkCssSelectorTree *tree;
@@ -1204,7 +1205,7 @@ parse_keyframes (GtkCssScanner *scanner)
 
   gtk_css_parser_end_block_prelude (scanner->parser);
 
-  keyframes = _gtk_css_keyframes_parse (scanner->parser);
+  keyframes = _gtk_css_keyframes_parse (scanner->parser, priv->value_pool);
   if (keyframes != NULL)
     {
       if (gtk_css_scanner_should_commit (scanner))
@@ -1421,6 +1422,8 @@ parse_declaration (GtkCssScanner *scanner,
       else
         section = NULL;
 
+      value = gtk_css_value_pool_intern (priv->value_pool, value);
+
       if (GTK_IS_CSS_SHORTHAND_PROPERTY (property))
         {
           GtkCssShorthandProperty *shorthand = GTK_CSS_SHORTHAND_PROPERTY (property);
@@ -1613,6 +1616,9 @@ gtk_css_provider_load_internal (GtkCssProvider *self,
 
   before = GDK_PROFILER_CURRENT_TIME;
 
+  if (parent == NULL)
+    priv->value_pool = gtk_css_value_pool_new ();
+
   priv->bytes = bytes;
 
   scanner = gtk_css_scanner_new (self,
@@ -1625,7 +1631,10 @@ gtk_css_provider_load_internal (GtkCssProvider *self,
   gtk_css_scanner_destroy (scanner);
 
   if (parent == NULL)
-    gtk_css_provider_postprocess (self);
+    {
+      g_clear_pointer (&priv->value_pool, g_hash_table_unref);
+      gtk_css_provider_postprocess (self);
+    }
 
   if (GDK_PROFILER_IS_RUNNING)
     {

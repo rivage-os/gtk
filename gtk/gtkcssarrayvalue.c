@@ -135,6 +135,32 @@ gtk_css_value_array_equal (const GtkCssValue *value1,
   return TRUE;
 }
 
+static guint
+gtk_css_value_array_pool_hash (const GtkCssValue *value)
+{
+  return value->n_values;
+}
+
+static gboolean
+gtk_css_value_array_pool_equal (const GtkCssValue *a,
+                                const GtkCssValue *b)
+{
+  return a->n_values == b->n_values;
+}
+
+static guint
+gtk_css_value_array_pool_n_children (const GtkCssValue *value)
+{
+  return value->n_values;
+}
+
+static GtkCssValue **
+gtk_css_value_array_pool_child (GtkCssValue *value,
+                                guint        index)
+{
+  return &value->values[index];
+}
+
 static inline guint
 gcd (guint a, guint b)
 {
@@ -411,7 +437,11 @@ static const GtkCssValueClass GTK_CSS_VALUE_ARRAY = {
   gtk_css_value_array_transition,
   gtk_css_value_array_is_dynamic,
   gtk_css_value_array_get_dynamic_value,
-  gtk_css_value_array_print
+  gtk_css_value_array_print,
+  gtk_css_value_array_pool_hash,
+  gtk_css_value_array_pool_equal,
+  gtk_css_value_array_pool_n_children,
+  gtk_css_value_array_pool_child
 };
 
 GtkCssValue *

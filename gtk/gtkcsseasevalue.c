@@ -80,6 +80,46 @@ gtk_css_value_ease_equal (const GtkCssValue *ease1,
     }
 }
 
+static guint
+ease_pool_hash_double (double value)
+{
+  guint64 bits;
+
+  memcpy (&bits, &value, sizeof (bits));
+  return (guint) (bits ^ (bits >> 32));
+}
+
+static guint
+gtk_css_value_ease_pool_hash (const GtkCssValue *value)
+{
+  guint hash = value->type;
+
+  if (value->type == GTK_CSS_EASE_STEPS)
+    return hash * 33 + value->u.steps.steps * 33 + value->u.steps.start;
+
+  hash = hash * 33 + ease_pool_hash_double (value->u.cubic.x1);
+  hash = hash * 33 + ease_pool_hash_double (value->u.cubic.y1);
+  hash = hash * 33 + ease_pool_hash_double (value->u.cubic.x2);
+  return hash * 33 + ease_pool_hash_double (value->u.cubic.y2);
+}
+
+static gboolean
+gtk_css_value_ease_pool_equal (const GtkCssValue *a,
+                               const GtkCssValue *b)
+{
+  if (a->type != b->type)
+    return FALSE;
+
+  if (a->type == GTK_CSS_EASE_STEPS)
+    return a->u.steps.steps == b->u.steps.steps &&
+           a->u.steps.start == b->u.steps.start;
+
+  return memcmp (&a->u.cubic.x1, &b->u.cubic.x1, sizeof (double)) == 0 &&
+         memcmp (&a->u.cubic.y1, &b->u.cubic.y1, sizeof (double)) == 0 &&
+         memcmp (&a->u.cubic.x2, &b->u.cubic.x2, sizeof (double)) == 0 &&
+         memcmp (&a->u.cubic.y2, &b->u.cubic.y2, sizeof (double)) == 0;
+}
+
 static GtkCssValue *
 gtk_css_value_ease_transition (GtkCssValue *start,
                                GtkCssValue *end,
@@ -141,7 +181,9 @@ static const GtkCssValueClass GTK_CSS_VALUE_EASE = {
   gtk_css_value_ease_transition,
   NULL,
   NULL,
-  gtk_css_value_ease_print
+  gtk_css_value_ease_print,
+  gtk_css_value_ease_pool_hash,
+  gtk_css_value_ease_pool_equal
 };
 
 GtkCssValue *
@@ -404,6 +446,5 @@ _gtk_css_ease_value_transform (const GtkCssValue *ease,
       return 1.0;
     }
 }
-
 
 

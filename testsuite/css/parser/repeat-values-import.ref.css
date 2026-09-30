@@ -1,0 +1,8 @@
+c {
+  background-position: left top, right bottom;
+  border-bottom-left-radius: 3px;
+  border-bottom-right-radius: 2px;
+  border-top-left-radius: 2px;
+  border-top-right-radius: 3px;
+  transition-timing-function: ease-in, ease-out;
+}

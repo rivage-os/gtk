@@ -160,6 +160,105 @@ gtk_css_value_account_shared (GtkCssValue *value,
 #endif
 }
 
+static guint
+pool_hash (gconstpointer data)
+{
+  const GtkCssValue *value = data;
+  guint hash = g_direct_hash ((gpointer) value->class);
+
+  hash = hash * 33 + value->is_computed;
+  hash = hash * 33 + value->contains_variables;
+  hash = hash * 33 + value->contains_current_color;
+  hash = hash * 33 + value->class->pool_hash (value);
+
+  for (guint i = 0; value->class->pool_n_children &&
+                    i < value->class->pool_n_children (value); i++)
+    hash = hash * 33 + pool_hash (*value->class->pool_child ((GtkCssValue *) value, i));
+
+  return hash;
+}
+
+static gboolean
+pool_equal (gconstpointer a,
+            gconstpointer b)
+{
+  const GtkCssValue *left = a;
+  const GtkCssValue *right = b;
+
+  if (left->class != right->class ||
+      left->is_computed != right->is_computed ||
+      left->contains_variables != right->contains_variables ||
+      left->contains_current_color != right->contains_current_color ||
+      !left->class->pool_equal (left, right) ||
+      (left->class->pool_n_children &&
+       left->class->pool_n_children (left) != right->class->pool_n_children (right)))
+    return FALSE;
+
+  for (guint i = 0; left->class->pool_n_children &&
+                    i < left->class->pool_n_children (left); i++)
+    {
+      if (!pool_equal (*left->class->pool_child ((GtkCssValue *) left, i),
+                       *right->class->pool_child ((GtkCssValue *) right, i)))
+        return FALSE;
+    }
+
+  return TRUE;
+}
+
+GHashTable *
+gtk_css_value_pool_new (void)
+{
+  return g_hash_table_new_full (pool_hash, pool_equal,
+                                (GDestroyNotify) gtk_css_value_unref, NULL);
+}
+
+static gboolean
+pool_eligible (GtkCssValue *value)
+{
+  if (value->class->pool_hash == NULL ||
+      (value->class->pool_eligible && !value->class->pool_eligible (value)))
+    return FALSE;
+
+  for (guint i = 0; value->class->pool_n_children &&
+                    i < value->class->pool_n_children (value); i++)
+    {
+      if (!pool_eligible (*value->class->pool_child (value, i)))
+        return FALSE;
+    }
+
+  return TRUE;
+}
+
+GtkCssValue *
+gtk_css_value_pool_intern (GHashTable  *pool,
+                           GtkCssValue *value)
+{
+  GtkCssValue *canonical;
+
+  if (!pool_eligible (value))
+    return value;
+
+  for (guint i = 0; value->class->pool_n_children &&
+                    i < value->class->pool_n_children (value); i++)
+    {
+      GtkCssValue **child = value->class->pool_child (value, i);
+
+      /* Parser composite caches use child identity as a key. */
+      if (value->ref_count == 1)
+        *child = gtk_css_value_pool_intern (pool, *child);
+    }
+
+  canonical = g_hash_table_lookup (pool, value);
+  if (canonical != NULL)
+    {
+      gtk_css_value_unref (value);
+      return gtk_css_value_ref (canonical);
+    }
+
+  g_hash_table_add (pool, gtk_css_value_ref (value));
+  return value;
+}
+
 GtkCssValue *
 gtk_css_value_alloc (const GtkCssValueClass *klass,
                      gsize                   size)

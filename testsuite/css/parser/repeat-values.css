@@ -1,0 +1,23 @@
+@import url("repeat-values-import.css");
+
+a {
+  border-radius: 2px 3px;
+  background-position: left top, right bottom;
+  transition-timing-function: ease-in, ease-out;
+  --space: 4px;
+  margin: var(--space);
+  margin-left: 8px;
+}
+
+b {
+  border-radius: 2px 3px;
+  background-position: left top, right bottom;
+  transition-timing-function: ease-in, ease-out;
+  --space: 6px;
+  margin: var(--space);
+}
+
+@keyframes move {
+  from { margin: var(--space, 1px); }
+  to { margin: var(--other, 2px); }
+}

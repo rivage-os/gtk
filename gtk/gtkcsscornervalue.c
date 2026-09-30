@@ -96,6 +96,32 @@ gtk_css_value_corner_print (const GtkCssValue *corner,
     }
 }
 
+static guint
+gtk_css_value_corner_pool_hash (const GtkCssValue *value)
+{
+  return 0;
+}
+
+static gboolean
+gtk_css_value_corner_pool_equal (const GtkCssValue *a,
+                                  const GtkCssValue *b)
+{
+  return TRUE;
+}
+
+static guint
+gtk_css_value_corner_pool_n_children (const GtkCssValue *value)
+{
+  return 2;
+}
+
+static GtkCssValue **
+gtk_css_value_corner_pool_child (GtkCssValue *value,
+                                  guint        index)
+{
+  return index == 0 ? &value->x : &value->y;
+}
+
 static const GtkCssValueClass GTK_CSS_VALUE_CORNER = {
   "GtkCssCornerValue",
   gtk_css_value_corner_free,
@@ -105,7 +131,11 @@ static const GtkCssValueClass GTK_CSS_VALUE_CORNER = {
   gtk_css_value_corner_transition,
   NULL,
   NULL,
-  gtk_css_value_corner_print
+  gtk_css_value_corner_print,
+  gtk_css_value_corner_pool_hash,
+  gtk_css_value_corner_pool_equal,
+  gtk_css_value_corner_pool_n_children,
+  gtk_css_value_corner_pool_child
 };
 
 static GtkCssValue corner_singletons[] = {

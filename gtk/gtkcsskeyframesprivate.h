@@ -29,7 +29,8 @@ G_BEGIN_DECLS
 
 typedef struct _GtkCssKeyframes GtkCssKeyframes;
 
-GtkCssKeyframes *   _gtk_css_keyframes_parse                  (GtkCssParser           *parser);
+GtkCssKeyframes *   _gtk_css_keyframes_parse                  (GtkCssParser           *parser,
+                                                               GHashTable             *value_pool);
 
 GtkCssKeyframes *   _gtk_css_keyframes_ref                    (GtkCssKeyframes        *keyframes);
 void                _gtk_css_keyframes_unref                  (GtkCssKeyframes        *keyframes);
@@ -59,4 +60,3 @@ GtkCssVariableValue *_gtk_css_keyframes_get_variable          (GtkCssKeyframes  
                                                                GtkCssVariableValue    *default_value);
 
 G_END_DECLS
-

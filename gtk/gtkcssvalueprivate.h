@@ -71,6 +71,13 @@ struct _GtkCssValueClass {
                                                        gint64                      monotonic_time);
   void          (* print)                             (const GtkCssValue          *value,
                                                        GString                    *string);
+  guint         (* pool_hash)                         (const GtkCssValue          *value);
+  gboolean      (* pool_equal)                        (const GtkCssValue          *a,
+                                                       const GtkCssValue          *b);
+  guint         (* pool_n_children)                   (const GtkCssValue          *value);
+  GtkCssValue **(* pool_child)                        (GtkCssValue                *value,
+                                                       guint                       index);
+  gboolean      (* pool_eligible)                     (const GtkCssValue          *value);
 };
 
 GType         gtk_css_value_get_type                  (void);
@@ -83,6 +90,9 @@ void          gtk_css_value_account_shared            (GtkCssValue              
                                                        gpointer                    shared,
                                                        gsize                       bytes,
                                                        gboolean                    add);
+GHashTable *  gtk_css_value_pool_new                  (void);
+GtkCssValue * gtk_css_value_pool_intern               (GHashTable                 *pool,
+                                                       GtkCssValue                *value);
 #define gtk_css_value_new(name, klass) ((name *) gtk_css_value_alloc ((klass), sizeof (name)))
 
 GtkCssValue * (gtk_css_value_ref)                     (GtkCssValue                *value);

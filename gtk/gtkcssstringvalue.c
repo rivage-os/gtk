@@ -49,6 +49,12 @@ gtk_css_value_string_equal (const GtkCssValue *value1,
   return g_strcmp0 (value1->string, value2->string) == 0;
 }
 
+static guint
+gtk_css_value_string_pool_hash (const GtkCssValue *value)
+{
+  return value->string ? g_str_hash (value->string) : 0;
+}
+
 static GtkCssValue *
 gtk_css_value_string_transition (GtkCssValue *start,
                                  GtkCssValue *end,
@@ -124,7 +130,9 @@ static const GtkCssValueClass GTK_CSS_VALUE_STRING = {
   gtk_css_value_string_transition,
   NULL,
   NULL,
-  gtk_css_value_string_print
+  gtk_css_value_string_print,
+  gtk_css_value_string_pool_hash,
+  gtk_css_value_string_equal
 };
 
 static const GtkCssValueClass GTK_CSS_VALUE_IDENT = {
@@ -136,7 +144,9 @@ static const GtkCssValueClass GTK_CSS_VALUE_IDENT = {
   gtk_css_value_string_transition,
   NULL,
   NULL,
-  gtk_css_value_ident_print
+  gtk_css_value_ident_print,
+  gtk_css_value_string_pool_hash,
+  gtk_css_value_string_equal
 };
 
 GtkCssValue *
@@ -229,5 +239,3 @@ _gtk_css_ident_value_get (const GtkCssValue *value)
 
   return value->string;
 }
-
-

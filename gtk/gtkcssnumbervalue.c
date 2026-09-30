@@ -447,6 +447,60 @@ gtk_css_value_number_equal (const GtkCssValue *val1,
   return TRUE;
 }
 
+static guint
+number_pool_hash_double (double value)
+{
+  guint64 bits;
+
+  memcpy (&bits, &value, sizeof (bits));
+  return (guint) (bits ^ (bits >> 32));
+}
+
+static guint
+gtk_css_value_number_pool_hash (const GtkCssValue *value)
+{
+  guint hash = value->type;
+
+  if (value->type == TYPE_DIMENSION)
+    return hash * 33 + value->dimension.unit * 33 +
+           number_pool_hash_double (value->dimension.value);
+
+  return hash * 33 + value->calc.mode * 33 + value->calc.n_terms;
+}
+
+static gboolean
+gtk_css_value_number_pool_equal (const GtkCssValue *a,
+                                 const GtkCssValue *b)
+{
+  if (a->type != b->type)
+    return FALSE;
+
+  if (a->type == TYPE_DIMENSION)
+    return a->dimension.unit == b->dimension.unit &&
+           memcmp (&a->dimension.value, &b->dimension.value, sizeof (double)) == 0;
+
+  return a->calc.mode == b->calc.mode && a->calc.n_terms == b->calc.n_terms;
+}
+
+static guint
+gtk_css_value_number_pool_n_children (const GtkCssValue *value)
+{
+  return value->type == TYPE_DIMENSION ? 0 : value->calc.n_terms;
+}
+
+static GtkCssValue **
+gtk_css_value_number_pool_child (GtkCssValue *value,
+                                 guint        index)
+{
+  return &value->calc.terms[index];
+}
+
+static gboolean
+gtk_css_value_number_pool_eligible (const GtkCssValue *value)
+{
+  return value->type != TYPE_COLOR_COORD;
+}
+
 static void
 gtk_css_value_number_print (const GtkCssValue *value,
                             GString           *string)
@@ -654,7 +708,12 @@ static const GtkCssValueClass GTK_CSS_VALUE_NUMBER = {
   gtk_css_value_number_transition,
   NULL,
   NULL,
-  gtk_css_value_number_print
+  gtk_css_value_number_print,
+  gtk_css_value_number_pool_hash,
+  gtk_css_value_number_pool_equal,
+  gtk_css_value_number_pool_n_children,
+  gtk_css_value_number_pool_child,
+  gtk_css_value_number_pool_eligible
 };
 
 static gsize
